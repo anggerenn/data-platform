@@ -1,0 +1,10 @@
+version: 2
+
+sources:
+  - name: raw
+    description: "Raw data ingested by dlt"
+    tables:
+      - name: orders
+        description: "Raw orders data"
+      - name: customers
+        description: "Raw customers data"

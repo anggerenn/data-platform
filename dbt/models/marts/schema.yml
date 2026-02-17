@@ -1,0 +1,29 @@
+version: 2
+
+models:
+  - name: daily_sales
+    description: "Aggregated daily sales"
+    meta:
+      label: "Daily Sales"
+    columns:
+      - name: order_date
+        meta:
+          dimension:
+            type: date
+      - name: category
+        meta:
+          dimension:
+            type: string
+      - name: revenue
+        meta:
+          metrics:
+            total_revenue:
+              type: sum
+              label: "Total Revenue"
+              description: "Sum of revenue across all orders"
+      - name: order_count
+        meta:
+          metrics:
+            total_orders:
+              type: sum
+              label: "Total Orders"
