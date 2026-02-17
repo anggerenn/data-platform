@@ -29,7 +29,8 @@ services:
       context: .
       dockerfile: docker/Dockerfile.prefect
     depends_on:
-      - prefect-server
+      prefect-server: 
+        condition: service_healthy
     environment:
       PREFECT_API_URL: "http://prefect-server:4200/api"
       ANALYTICS_DB_PATH: "/data/analytics.duckdb"
