@@ -29,12 +29,17 @@ services:
       context: .
       dockerfile: docker/Dockerfile.prefect
     depends_on:
-      prefect-server: 
-        condition: service_healthy
+      - prefect-server
     environment:
       PREFECT_API_URL: "http://prefect-server:4200/api"
       ANALYTICS_DB_PATH: "/data/analytics.duckdb"
       ANALYTICS_PIPELINES_DIR: "/data/pipelines"
+    command: >
+      bash -c "
+        echo 'Waiting for prefect-server...' &&
+        sleep 30 &&
+        prefect worker start --pool default-pool
+      "
     command: prefect worker start --pool default-pool
     volumes:
       - ./dbt:/opt/prefect/dbt
