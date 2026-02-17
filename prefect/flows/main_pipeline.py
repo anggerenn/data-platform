@@ -1,7 +1,8 @@
+import path_setup
 from prefect import flow
-from flows.dlt_ingestion import run_dlt
-from flows.dbt_transformation import run_dbt
-from flows.evidence_build import build_evidence
+from dlt_ingestion import run_dlt
+from dbt_transformation import run_dbt
+from evidence_build import build_evidence
 
 @flow(name="analytics_pipeline")
 def analytics_pipeline():
@@ -10,4 +11,4 @@ def analytics_pipeline():
     build_evidence()
 
 if __name__ == "__main__":
-    analytics_pipeline.serve()
+    analytics_pipeline()
