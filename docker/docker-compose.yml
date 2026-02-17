@@ -44,26 +44,6 @@ services:
       - data-network
     restart: unless-stopped
 
-  lightdash:
-    image: lightdash/lightdash:latest
-    depends_on:
-      - postgres
-    environment:
-      - PGHOST=postgres
-      - PGPORT=5432
-      - PGUSER=prefect
-      - PGPASSWORD=${POSTGRES_PASSWORD:-prefect}
-      - PGDATABASE=lightdash
-      - LIGHTDASH_SECRET=${LIGHTDASH_SECRET:-changeme}
-      - DBT_PROJECT_DIR=/usr/app/dbt
-      - DBT_PROFILES_DIR=/usr/app/dbt
-    volumes:
-      - ./dbt:/usr/app/dbt
-      - /data:/data
-    networks:
-      - data-network
-    restart: unless-stopped
-
 volumes:
   postgres_data:
 
