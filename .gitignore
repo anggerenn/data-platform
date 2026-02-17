@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+*.egg-info/
+
+# Data
+*.duckdb
+*.duckdb.wal
+/data/
+
+# Environment
+.env
+.env.local
+
+# dbt logs
+logs/
+target/
+
+# Prefect
+.prefect/
+~/.prefect/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+
+node_modules
