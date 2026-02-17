@@ -13,13 +13,17 @@ venv/
 .env
 .env.local
 
-# dbt logs
+# dbt
 logs/
 target/
+dbt_packages/
+.user.yml
 
 # Prefect
 .prefect/
-~/.prefect/
+
+# dlt
+.dlt/
 
 # IDE
 .vscode/
@@ -29,5 +33,5 @@ target/
 
 # OS
 .DS_Store
-
-node_modules
+Thumbs.db
+node_modules/
