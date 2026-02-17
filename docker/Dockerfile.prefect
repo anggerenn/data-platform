@@ -9,11 +9,11 @@ RUN apt-get update && apt-get install -y curl && \
 COPY requirements.txt /tmp/requirements.txt
 RUN pip install -r /tmp/requirements.txt
 
-# Install Evidence dependencies
+# Install Evidence dependencies 
 COPY evidence/package.json evidence/package-lock.json /tmp/evidence/
 RUN cd /tmp/evidence && npm install
 
 WORKDIR /opt/prefect
 
 # Register deployment then start worker
-CMD ["bash", "-c", "prefect deploy --all -n analytics-pipeline && prefect worker start --pool default-pool"]
+CMD ["bash", "-c", "prefect deployment build prefect/flows/main_pipeline.py:analytics_pipeline -n analytics-pipeline -p default-pool --apply && prefect worker start --pool default-pool"]
