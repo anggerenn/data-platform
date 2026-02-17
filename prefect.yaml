@@ -1,0 +1,19 @@
+name: analytics-pipeline
+prefect-version: 3.4.25
+
+build: null
+push: null
+pull: null
+
+deployments:
+  - name: analytics-pipeline
+    entrypoint: prefect/flows/main_pipeline.py:analytics_pipeline
+    schedule: null
+    work_pool:
+      name: default-pool
+
+  - name: evidence-pipeline
+    entrypoint: prefect/flows/evidence_pipeline.py:evidence_pipeline
+    schedule: null
+    work_pool:
+      name: default-pool
