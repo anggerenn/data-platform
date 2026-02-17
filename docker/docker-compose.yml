@@ -1,0 +1,76 @@
+# docker/docker-compose.yml
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: prefect
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-prefect}
+      POSTGRES_DB: prefect
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - data-network
+    restart: unless-stopped
+
+  prefect-server:
+    image: prefecthq/prefect:3.4.25-python3.12
+    depends_on:
+      - postgres
+    environment:
+      PREFECT_API_DATABASE_CONNECTION_URL: postgresql+asyncpg://prefect:${POSTGRES_PASSWORD:-prefect}@postgres:5432/prefect
+      PREFECT_SERVER_API_HOST: 0.0.0.0
+    ports:
+      - "4200:4200"
+    command: prefect server start
+    networks:
+      - data-network
+    restart: unless-stopped
+
+  prefect-worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.prefect
+    depends_on:
+      - prefect-server
+    environment:
+      PREFECT_API_URL: "http://prefect-server:4200/api"
+      ANALYTICS_DB_PATH: "/data/analytics.duckdb"
+      ANALYTICS_PIPELINES_DIR: "/data/pipelines"
+    command: prefect worker start --pool default-pool
+    volumes:
+      - ../dbt:/opt/prefect/dbt
+      - ../prefect:/opt/prefect/flows
+      - /data:/data
+    networks:
+      - data-network
+    restart: unless-stopped
+
+  lightdash:
+    image: lightdash/lightdash:latest
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+    environment:
+      - PGHOST=postgres
+      - PGPORT=5432
+      - PGUSER=prefect
+      - PGPASSWORD=${POSTGRES_PASSWORD:-prefect}
+      - PGDATABASE=lightdash
+      - LIGHTDASH_SECRET=${LIGHTDASH_SECRET:-changeme}
+      - DBT_PROJECT_DIR=/usr/app/dbt
+      - DBT_PROFILES_DIR=/usr/app/dbt
+    volumes:
+      - ../dbt:/usr/app/dbt
+      - /data:/data
+    networks:
+      - data-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  data-network:
+    driver: bridge

@@ -1,0 +1,7 @@
+default:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var('ANALYTICS_DB_PATH') }}"
+      schema: transformed
