@@ -3,7 +3,10 @@ prefect-version: 3.4.25
 
 build: null
 push: null
-pull: null
+pull:
+  - prefect.deployments.steps.git_clone:
+      repository: https://github.com/anggerenn/data-platform.git
+      branch: main
 
 deployments:
   - name: analytics-pipeline
