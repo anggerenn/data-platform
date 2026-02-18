@@ -52,7 +52,7 @@ services:
     restart: unless-stopped
 
   evidence:
-    image: node:18-alpine
+    image: node:20-alpine
     working_dir: /data/evidence
     command: >
       sh -c "
