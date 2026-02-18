@@ -14,9 +14,3 @@ deployments:
     schedule: null
     work_pool:
       name: default-pool
-
-  - name: evidence-pipeline
-    entrypoint: prefect/flows/evidence_pipeline.py:evidence_pipeline
-    schedule: null
-    work_pool:
-      name: default-pool

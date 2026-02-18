@@ -4,31 +4,30 @@
 - **dlt**: Data ingestion
 - **dbt**: Transformations
 - **DuckDB**: Analytics database
-- **Evidence**: BI & dashboards (static site, rebuilt on each pipeline run)
+- **Metabase**: BI & dashboards
 - **Prefect**: Orchestration
 
 ## Structure
 - `/dbt` - dbt models and profiles
-- `/evidence` - Evidence dashboards and sources
 - `/prefect` - Orchestration flows
 - `/docker` - Docker configuration
+- `/scripts` - Database init scripts
 
 ## Pipeline Flow
 ```
-dlt (ingest) → dbt (transform) → Evidence (build) → nginx (serve)
+dlt (ingest) → dbt (transform) → Metabase (visualize)
 ```
 
 ## Local Development
 1. Copy `.env.example` to `.env` and fill in values
 2. Run `docker compose -f docker/docker-compose.yml up -d`
 3. Access Prefect UI at `http://localhost:4200`
-
-> Note: Evidence dashboard is only available after the pipeline runs at least once.
+4. Access Metabase at `http://localhost:3000`
 
 ## Environment Variables
 | Variable | Description |
 |---|---|
-| `POSTGRES_PASSWORD` | Postgres password for Prefect backend |
+| `POSTGRES_PASSWORD` | Postgres password for Prefect and Metabase |
 | `ANALYTICS_DB_PATH` | Path to DuckDB file |
 | `ANALYTICS_PIPELINES_DIR` | Path to dlt pipeline state directory |
 
@@ -39,5 +38,11 @@ dlt (ingest) → dbt (transform) → Evidence (build) → nginx (serve)
 4. Set environment variables from the table above
 5. Set domains in Coolify UI:
    - `prefect-server` → `prefect.yourdomain.com`
-   - `nginx` → `evidence.yourdomain.com`
+   - `metabase` → `metabase.yourdomain.com`
 6. Deploy!
+
+## Connecting Metabase to DuckDB
+1. Open Metabase UI → Admin → Databases → Add Database
+2. Select **DuckDB** from the database type dropdown
+3. Set path to `/data/analytics.duckdb`
+4. Test connection and Save
