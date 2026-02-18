@@ -8,6 +8,7 @@ services:
       POSTGRES_DB: prefect
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-metabase.sql:/docker-entrypoint-initdb.d/init-metabase.sql
     networks:
       - data-network
     restart: unless-stopped
@@ -51,24 +52,23 @@ services:
       - data-network
     restart: unless-stopped
 
-  evidence:
-    image: node:20-alpine
-    working_dir: /data/evidence
-    command: >
-      sh -c "
-        apk add --no-cache git python3 make g++ &&
-        if [ ! -f /data/evidence/package.json ]; then
-          git clone https://github.com/anggerenn/data-platform.git /tmp/repo &&
-          cp -r /tmp/repo/evidence/. /data/evidence/
-        fi &&
-        npm install &&
-        npm rebuild sqlite3 &&
-        npm run dev -- --host 0.0.0.0 --port 3000
-      "
+  metabase:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.metabase
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: metabase
+      MB_DB_PORT: 5432
+      MB_DB_USER: prefect
+      MB_DB_PASS: ${POSTGRES_PASSWORD:-prefect}
+      MB_DB_HOST: postgres
     volumes:
       - /data:/data
     networks:
       - data-network
+    depends_on:
+      - postgres
     restart: unless-stopped
 
 volumes:
