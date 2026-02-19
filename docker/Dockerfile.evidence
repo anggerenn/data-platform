@@ -2,18 +2,14 @@ FROM node:20-slim
 
 WORKDIR /evidence
 
-# Copy your Evidence project files
 COPY ./evidence/ .
 
-# Install deps and rebuild native bindings for this container's arch
-RUN npm install
+ENV NODE_OPTIONS=--max-old-space-size=512
+RUN npm install --prefer-offline --no-audit --no-fund
 RUN npm rebuild sqlite3
-
-# Build the static site
-RUN npm run sources && npm run build
-
-# Serve with a lightweight static server
 RUN npm install -g serve
 
 EXPOSE 3000
-CMD ["serve", "build", "-p", "3000"]
+
+# At runtime: source the DuckDB data, build static site, then serve it
+CMD ["/bin/sh", "-c", "npm run sources && npm run build && serve build -p 3000"]
