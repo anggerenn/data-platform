@@ -1,8 +1,7 @@
 FROM prefecthq/prefect:3.4.25-python3.12
 
-# Install Node.js for Evidence build
 RUN apt-get update && apt-get install -y curl && \
-    curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     apt-get install -y nodejs && \
     apt-get clean
 
@@ -11,5 +10,7 @@ RUN pip install -r /tmp/requirements.txt
 
 WORKDIR /opt/prefect
 
-# Register deployment then start worker
+COPY prefect.yaml /opt/prefect/prefect.yaml
+COPY prefect/ /opt/prefect/prefect/
+
 CMD ["prefect", "worker", "start", "--pool", "default-pool"]

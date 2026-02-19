@@ -19,4 +19,4 @@ COPY ./evidence/ .
 EXPOSE 3000
 
 # At runtime: read DuckDB, build static site, serve it
-CMD ["/bin/sh", "-c", "npm run sources && npm run build && serve build -p 3000"]
+CMD ["/bin/sh", "-c", "mkdir -p /evidence/sources/analytics/data && ln -sf /data/analytics.duckdb /evidence/sources/analytics/data/analytics.duckdb && npm run sources && npm run build && serve build -p 3000"]
