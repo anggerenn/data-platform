@@ -2,14 +2,21 @@ FROM node:20-slim
 
 WORKDIR /evidence
 
-COPY ./evidence/ .
+# Copy package.json first for better layer caching
+COPY ./evidence/package.json .
+
+# Remove lockfile to avoid conflicts with cleaned up package.json
+RUN rm -f package-lock.json
 
 ENV NODE_OPTIONS=--max-old-space-size=512
-RUN npm install --prefer-offline --no-audit --no-fund
+RUN npm install --no-audit --no-fund --legacy-peer-deps
 RUN npm rebuild sqlite3
 RUN npm install -g serve
 
+# Copy the rest of the evidence project
+COPY ./evidence/ .
+
 EXPOSE 3000
 
-# At runtime: source the DuckDB data, build static site, then serve it
+# At runtime: read DuckDB, build static site, serve it
 CMD ["/bin/sh", "-c", "npm run sources && npm run build && serve build -p 3000"]
