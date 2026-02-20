@@ -36,6 +36,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.prefect
+    exclude_from_hc: true
     depends_on:
       prefect-server:
         condition: service_healthy
