@@ -58,7 +58,8 @@ services:
     volumes:
       - /data:/data
     environment:
-      EVIDENCE_SOURCE__analytics__filename: /data/analytics.duckdb
+      NODE_OPTIONS: "--max-old-space-size=1800"
+    mem_limit: 2g
     networks:
       - data-network
     restart: unless-stopped    

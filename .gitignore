@@ -29,7 +29,7 @@ dbt_packages/
 .evidence
 .svelte-kit
 evidence/build
-evidence/sources/analytics/analytics.duckdb
+evidence/sources/*/analytics.duckdb
 evidence/static/data
 *.options.yaml
 
@@ -43,6 +43,7 @@ evidence/static/data
 .DS_Store
 Thumbs.db
 node_modules/
+package-lock.json
 
 # npm
 .npmrc
