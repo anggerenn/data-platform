@@ -21,6 +21,8 @@ services:
       PREFECT_SERVER_API_HOST: 0.0.0.0
       PREFECT_API_URL: http://prefect-server:4200/api
       PREFECT_UI_API_URL: ${SERVICE_URL_PREFECT_SERVER}/api
+    ports:
+      - "4200:4200"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4200/api/health')"]
       interval: 10s
@@ -61,6 +63,8 @@ services:
     environment:
       NODE_OPTIONS: "--max-old-space-size=1800"
     mem_limit: 2g
+    ports:
+      - "3000:3000"
     networks:
       - data-network
     restart: unless-stopped    
