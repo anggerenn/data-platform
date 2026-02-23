@@ -38,7 +38,6 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.prefect
-    # exclude_from_hc: true
     depends_on:
       prefect-server:
         condition: service_healthy
@@ -46,10 +45,8 @@ services:
       PREFECT_API_URL: "http://prefect-server:4200/api"
       ANALYTICS_DB_PATH: "/data/analytics.duckdb"
       ANALYTICS_PIPELINES_DIR: "/data/pipelines"
-      EVIDENCE_DIR: "/data/evidence"
     volumes:
-      - /data:/data
-      - /var/run/docker.sock:/var/run/docker.sock
+      - ~/data:/data
     networks:
       - data-network
     restart: unless-stopped
@@ -73,12 +70,13 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.superset
+    user: root
     environment:
       SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY}
       SUPERSET_ADMIN_USERNAME: ${SUPERSET_ADMIN_USERNAME:-admin}
       SUPERSET_ADMIN_PASSWORD: ${SUPERSET_ADMIN_PASSWORD:-admin}
     volumes:
-      - /data:/data
+      - ~/data:/data
       - superset_home:/app/superset_home
     ports:
       - "8088:8088"
