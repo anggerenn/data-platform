@@ -38,7 +38,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.prefect
-    exclude_from_hc: true
+    # exclude_from_hc: true
     depends_on:
       prefect-server:
         condition: service_healthy
@@ -54,23 +54,41 @@ services:
       - data-network
     restart: unless-stopped
 
-  evidence:
+  # evidence:
+  #   build:
+  #     context: .
+  #     dockerfile: docker/Dockerfile.evidence
+  #   volumes:
+  #     - /data:/data
+  #   environment:
+  #     NODE_OPTIONS: "--max-old-space-size=1800"
+  #   mem_limit: 2g
+  #   ports:
+  #     - "3000:3000"
+  #   networks:
+  #     - data-network
+  #   restart: unless-stopped   
+  
+  superset:
     build:
       context: .
-      dockerfile: docker/Dockerfile.evidence
+      dockerfile: docker/Dockerfile.superset
+    environment:
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY}
+      SUPERSET_ADMIN_USERNAME: ${SUPERSET_ADMIN_USERNAME:-admin}
+      SUPERSET_ADMIN_PASSWORD: ${SUPERSET_ADMIN_PASSWORD:-admin}
     volumes:
       - /data:/data
-    environment:
-      NODE_OPTIONS: "--max-old-space-size=1800"
-    mem_limit: 2g
+      - superset_home:/app/superset_home
     ports:
-      - "3000:3000"
+      - "8088:8088"
     networks:
       - data-network
-    restart: unless-stopped    
+    restart: unless-stopped
 
 volumes:
   postgres_data:
+  superset_home:
 
 networks:
   data-network:

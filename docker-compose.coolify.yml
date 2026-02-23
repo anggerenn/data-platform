@@ -1,0 +1,3 @@
+services:
+  prefect-worker:
+    exclude_from_hc: true
