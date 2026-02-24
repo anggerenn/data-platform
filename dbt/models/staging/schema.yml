@@ -1,0 +1,20 @@
+models:
+  - name: stg_orders
+    description: "Staged orders from raw ingestion"
+    columns:
+      - name: order_id
+        description: "Unique order identifier"
+      - name: customer_id
+        description: "Unique customer identifier"
+      - name: order_date
+        description: "Date the order was placed"
+      - name: category
+        description: "Product category"
+      - name: city
+        description: "City where the order was placed"
+      - name: amount
+        description: "Order amount (unit price)"
+      - name: quantity
+        description: "Units ordered"
+      - name: line_total
+        description: "Total line value (amount * quantity)"
