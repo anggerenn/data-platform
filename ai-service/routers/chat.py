@@ -1,9 +1,11 @@
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
 import re
-from llm import generate_sql, classify_intent
+from pydantic import BaseModel
 from sql_engine import execute_query
+from fastapi import APIRouter, HTTPException
+from llm import generate_sql, classify_intent
 from superset_client import get_session, get_database_id, get_or_create_dataset, create_chart, create_dashboard
+from typing import Optional
+
 
 router = APIRouter()
 
@@ -12,6 +14,7 @@ DASHBOARD_KEYWORDS = {"dashboard", "save", "create", "persist", "keep", "store"}
 class ChatRequest(BaseModel):
     query: str
     db_name: str = "DuckDB"
+    history: Optional[list[dict]] = None
 
 def extract_table_info(sql: str) -> tuple[str, str]:
     """
@@ -41,7 +44,7 @@ def chat(body: ChatRequest):
         else:
             intent = "explore"
 
-        sql = generate_sql(body.query)
+        sql = generate_sql(body.query, history=body.history)
         results = execute_query(sql)
         table_name, schema = extract_table_info(sql)
 
