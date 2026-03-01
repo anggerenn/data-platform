@@ -395,6 +395,127 @@
     background: #ff4d4d0d;
   }
 
+  /* ─── SESSION SUMMARY BUBBLE ─────────────────────────── */
+  .summary-bubble {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    animation: fadeIn 300ms ease;
+  }
+  .summary-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .summary-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--accent);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .summary-label-icon {
+    font-size: 11px;
+  }
+  .summary-copy-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 4px 8px;
+    cursor: pointer;
+    border-radius: var(--radius);
+    transition: border-color 120ms, color 120ms;
+    flex-shrink: 0;
+  }
+  .summary-copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .summary-copy-btn.copied { border-color: var(--accent); color: var(--accent); }
+
+  .summary-body {
+    font-family: var(--mono);
+    font-size: 10px;
+    line-height: 1.7;
+    color: var(--text-dim);
+    overflow-y: auto;
+    max-height: 260px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .summary-body::-webkit-scrollbar { width: 3px; }
+  .summary-body::-webkit-scrollbar-thumb { background: var(--border); }
+
+  /* Markdown rendering inside summary */
+  .summary-body h2 {
+    font-size: 11px;
+    color: var(--accent);
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    margin-top: 10px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 4px;
+  }
+  .summary-body h2:first-child { margin-top: 0; }
+  .summary-body strong { color: var(--text); font-weight: 500; }
+  .summary-body code {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    padding: 0 4px;
+    border-radius: 2px;
+    font-size: 10px;
+    color: #47d4ff;
+  }
+  .summary-body pre {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    padding: 8px;
+    overflow-x: auto;
+    margin: 6px 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .summary-body pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--text-dim);
+  }
+  .summary-body ul, .summary-body ol {
+    padding-left: 14px;
+    margin: 4px 0;
+  }
+  .summary-body li { margin: 2px 0; }
+  .summary-body hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 8px 0;
+  }
+  .summary-body em { color: var(--text-muted); font-style: normal; }
+
+  .summary-generating {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0.05em;
+    padding: 4px 0;
+  }
+
   /* ─── INPUT AREA ─────────────────────────────────────── */
   .input-area {
     padding: 10px 12px;
@@ -560,7 +681,7 @@ function appendLimitWarning(remaining) {
     animation: fadeIn 200ms ease;
   `;
   banner.textContent = remaining === 1
-    ? '⚠  This is your last message. Refresh to start a new session.'
+    ? '⚠  This is your last message. A session summary will be generated automatically.'
     : `⚠  ${remaining} message${remaining !== 1 ? 's' : ''} remaining in this session.`;
 
   document.getElementById('messages').appendChild(banner);
@@ -585,6 +706,7 @@ async function sendMessage() {
   if (emptyState) emptyState.remove();
 
   messageCount++;
+  const isLastMessage = messageCount === MAX_MESSAGES;
 
   // Record user message in history
   conversationHistory.push({ role: 'user', content: query });
@@ -594,7 +716,7 @@ async function sendMessage() {
   // Show warning at message 19 (1 remaining after this)
   if (messageCount === MAX_MESSAGES - 1) {
     appendLimitWarning(1);
-  } else if (messageCount === MAX_MESSAGES) {
+  } else if (isLastMessage) {
     // Disable input permanently
     input.disabled = true;
     input.placeholder = 'Session limit reached. Refresh to start over.';
@@ -610,7 +732,7 @@ async function sendMessage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         query,
-        history: conversationHistory.slice(-20), // send last 20 turns
+        history: conversationHistory.slice(-20),
       }),
     });
 
@@ -621,25 +743,192 @@ async function sendMessage() {
       appendError(`Server error ${res.status}: ${errText}`);
     } else {
       const data = await res.json();
-      // Record assistant reply in history so LLM has context next turn
       conversationHistory.push({
         role: 'assistant',
         content: `SQL executed: ${data.sql || ''}\nReturned ${data.results?.length || 0} rows.`,
       });
       renderResult(data);
+
+      // After message 20's response, trigger session summary
+      if (isLastMessage) {
+        await generateSummary();
+      }
     }
   } catch (err) {
     removeElement(thinkingId);
     appendError(`Could not reach API: ${err.message}`);
+    // Still attempt summary even if last message errored
+    if (isLastMessage) {
+      await generateSummary();
+    }
   } finally {
     if (messageCount < MAX_MESSAGES) sendBtn.disabled = false;
     input.focus();
   }
 }
 
+// ─── SESSION SUMMARY ─────────────────────────────────────
+async function generateSummary() {
+  // Remove the limit warning banner — summary replaces it visually
+  const limitWarning = document.getElementById('limit-warning');
+  if (limitWarning) limitWarning.remove();
+
+  // Append the summary bubble in "generating" state
+  const summaryEl = document.createElement('div');
+  summaryEl.id = 'session-summary';
+  summaryEl.className = 'summary-bubble';
+  summaryEl.innerHTML = `
+    <div class="summary-header">
+      <div class="summary-label">
+        <span class="summary-label-icon">⬡</span>
+        Session Summary
+      </div>
+    </div>
+    <div class="summary-generating">
+      <div class="thinking" style="background:transparent;border:none;padding:0;">
+        <span></span><span></span><span></span>
+      </div>
+      Generating summary…
+    </div>
+  `;
+  document.getElementById('messages').appendChild(summaryEl);
+  scrollToBottom();
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/summary`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ history: conversationHistory }),
+    });
+
+    if (!res.ok) throw new Error(`Status ${res.status}`);
+    const data = await res.json();
+    renderSummaryBubble(summaryEl, data.summary);
+
+  } catch (err) {
+    // Fallback: render a client-side summary if API fails
+    const fallbackMd = buildFallbackSummary();
+    renderSummaryBubble(summaryEl, fallbackMd, true);
+  }
+}
+
+function renderSummaryBubble(summaryEl, markdownText, isFallback = false) {
+  summaryEl.innerHTML = `
+    <div class="summary-header">
+      <div class="summary-label">
+        <span class="summary-label-icon">⬡</span>
+        Session Summary${isFallback ? ' (offline)' : ''}
+      </div>
+      <button class="summary-copy-btn" onclick="copySummary(this)">Copy</button>
+    </div>
+    <div class="summary-body" id="summary-body-content"></div>
+  `;
+
+  // Store raw markdown for copy
+  summaryEl.dataset.rawMarkdown = markdownText;
+
+  // Render markdown to HTML (lightweight parser — no external lib needed)
+  document.getElementById('summary-body-content').innerHTML = renderMarkdown(markdownText);
+  scrollToBottom();
+}
+
+function copySummary(btn) {
+  const summaryEl = document.getElementById('session-summary');
+  const raw = summaryEl?.dataset.rawMarkdown;
+  if (!raw) return;
+
+  navigator.clipboard.writeText(raw).then(() => {
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => {
+      btn.textContent = 'Copy';
+      btn.classList.remove('copied');
+    }, 2000);
+  }).catch(() => {
+    // Fallback for browsers without clipboard API
+    const ta = document.createElement('textarea');
+    ta.value = raw;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+  });
+}
+
+// Client-side fallback summary if /summary endpoint fails
+function buildFallbackSummary() {
+  const userMessages = conversationHistory
+    .filter(m => m.role === 'user')
+    .map(m => `- ${m.content}`);
+
+  const sqlBlocks = conversationHistory
+    .filter(m => m.role === 'assistant' && m.content.includes('SQL executed:'))
+    .map(m => {
+      const match = m.content.match(/SQL executed: (.+)/);
+      return match ? match[1] : null;
+    })
+    .filter(Boolean);
+
+  const lastSql = sqlBlocks.length ? `\`\`\`sql\n${sqlBlocks[sqlBlocks.length - 1]}\n\`\`\`` : '_Not available_';
+
+  return `## Session Summary
+
+**Explored:** ${userMessages.length} questions across this session.
+
+**Questions Asked:**
+${userMessages.join('\n')}
+
+**Last Query:**
+${lastSql}
+
+---
+*Paste this block at the start of your next session to restore context.*`;
+}
+
+// ─── LIGHTWEIGHT MARKDOWN RENDERER ───────────────────────
+function renderMarkdown(md) {
+  return md
+    // Fenced code blocks
+    .replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) =>
+      `<pre><code>${escapeHtml(code.trim())}</code></pre>`)
+    // Inline code
+    .replace(/`([^`]+)`/g, (_, code) => `<code>${escapeHtml(code)}</code>`)
+    // H2
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    // Bold
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    // Italic / muted (used for the footer note)
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    // HR
+    .replace(/^---$/gm, '<hr>')
+    // Unordered list items
+    .replace(/^- (.+)$/gm, '<li>$1</li>')
+    // Wrap consecutive <li> in <ul>
+    .replace(/(<li>[\s\S]*?<\/li>)(\n<li>[\s\S]*?<\/li>)*/g, match => `<ul>${match}</ul>`)
+    // Paragraphs — blank lines between content
+    .replace(/\n{2,}/g, '</p><p>')
+    // Clean up paragraph tags around block elements
+    .replace(/<p>(<h2>|<ul>|<pre>|<hr>)/g, '$1')
+    .replace(/(<\/h2>|<\/ul>|<\/pre>|<hr>)<\/p>/g, '$1')
+    // Wrap in opening paragraph
+    .replace(/^(?!<)/, '<p>')
+    + '</p>';
+}
+
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 // ─── FALLBACK DETECTION ───────────────────────────────────
 function isFallbackResult(results, columns) {
-  // Detect the "could not find relevant data" fallback row from LLM
   if (results.length === 1 && columns.length === 1 && columns[0] === 'message') {
     const val = String(Object.values(results[0])[0] || '').toLowerCase();
     if (val.includes('could not find') || val.includes('no relevant') || val.includes('cannot answer')) {
@@ -666,7 +955,6 @@ function renderResult(data) {
   const bubbleEl = document.createElement('div');
   bubbleEl.className = 'bubble';
 
-  // ── Check for fallback message ──
   const fallbackText = isFallbackResult(results, columns);
   if (fallbackText) {
     bubbleEl.style.cssText = 'color: var(--text-dim); font-size: 13px;';
@@ -677,17 +965,14 @@ function renderResult(data) {
     return;
   }
 
-  // ── Normal result ──
   const cardEl = document.createElement('div');
   cardEl.className = 'result-card';
 
-  // Badge
   const badge = document.createElement('div');
   badge.className = `intent-badge ${intent === 'dashboard' ? 'intent-dashboard' : 'intent-explore'}`;
   badge.innerHTML = intent === 'dashboard' ? '⬡ &nbsp;dashboard created' : '⬡ &nbsp;explore';
   cardEl.appendChild(badge);
 
-  // SQL disclosure
   if (data.sql) {
     const details = document.createElement('details');
     details.style.cssText = 'font-family: var(--mono); font-size: 10px;';
@@ -708,7 +993,6 @@ function renderResult(data) {
     noData.textContent = 'Query returned no rows.';
     cardEl.appendChild(noData);
   } else {
-    // Chart
     const chartWrap = document.createElement('div');
     chartWrap.className = 'chart-wrap';
     const canvas = document.createElement('canvas');
@@ -718,7 +1002,6 @@ function renderResult(data) {
     cardEl.appendChild(chartWrap);
     setTimeout(() => renderChart(chartId, columns, results), 0);
 
-    // Table
     const tableWrap = document.createElement('div');
     tableWrap.className = 'data-table-wrap';
     tableWrap.appendChild(buildTable(columns, results));
@@ -730,7 +1013,6 @@ function renderResult(data) {
     cardEl.appendChild(rowCount);
   }
 
-  // Dashboard link
   if (intent === 'dashboard' && data.dashboard_url) {
     const link = document.createElement('a');
     link.className = 'dashboard-link';
