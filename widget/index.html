@@ -752,14 +752,25 @@ async function sendMessage() {
       // on subsequent turns (prompt injection). Use a clean neutral string instead.
       const _results = data.results || [];
       const _cols = data.columns || (_results.length ? Object.keys(_results[0]) : []);
-      if (!isFallbackResult(_results, _cols) && data.sql) {
+      if (!isFallbackResult(_results, _cols, data.intent) && data.sql) {
         conversationHistory.push({
           role: 'assistant',
-          content: 'Returned ' + _results.length + ' rows with columns: ' + _cols.join(', ') + '.',
+          content: 'Returned ' + _results.length + ' rows from ' + (data.table_name || 'unknown table') + ' with columns: ' + _cols.join(', ') + '.',
         });
       }
 
-      renderResult(data);
+      // Clarification response — store as assistant turn so DeepSeek
+      // has its own question as context when user replies
+      if (data.intent === 'clarify') {
+        const clarifyText = data.results?.[0]?.message || '';
+        conversationHistory.push({
+          role: 'assistant',
+          content: 'Asked for clarification: ' + clarifyText,
+        });
+        appendClarification(clarifyText);
+      } else {
+        renderResult(data);
+      }
 
       // After message 20's response, trigger session summary
       if (isLastMessage) {
@@ -937,15 +948,40 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;');
 }
 
+// ─── CLARIFICATION BUBBLE ────────────────────────────────
+// Renders a plain conversational assistant message — no badge, no chart, no table.
+// Used when DeepSeek needs more context before generating SQL.
+function appendClarification(text) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'msg msg-bot';
+
+  const label = document.createElement('div');
+  label.className = 'msg-label';
+  label.textContent = 'assistant';
+
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.style.cssText = 'color: var(--text); font-size: 13px; font-style: italic;';
+  bubble.textContent = text;
+
+  wrapper.appendChild(label);
+  wrapper.appendChild(bubble);
+  document.getElementById('messages').appendChild(wrapper);
+  scrollToBottom();
+}
+
 // ─── FALLBACK DETECTION ───────────────────────────────────
-function isFallbackResult(results, columns) {
+function isFallbackResult(results, columns, intent) {
+  // Clarification responses share the same {message} shape but are handled
+  // separately by appendClarification() — never treat them as fallbacks
+  if (intent === 'clarify') return null;
   if (results.length === 1 && columns.length === 1 && columns[0] === 'message') {
     const val = String(Object.values(results[0])[0] || '').toLowerCase();
     if (
       val.includes('could not find') ||
       val.includes('no relevant') ||
       val.includes('cannot answer') ||
-      val.includes('could not be executed')   // duckdb.Error fallback from execute_query()
+      val.includes('could not be executed')
     ) {
       return Object.values(results[0])[0];
     }
@@ -970,7 +1006,7 @@ function renderResult(data) {
   const bubbleEl = document.createElement('div');
   bubbleEl.className = 'bubble';
 
-  const fallbackText = isFallbackResult(results, columns);
+  const fallbackText = isFallbackResult(results, columns, intent);
   if (fallbackText) {
     bubbleEl.style.cssText = 'color: var(--text-dim); font-size: 13px;';
     bubbleEl.textContent = fallbackText;

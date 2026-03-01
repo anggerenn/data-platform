@@ -2,7 +2,7 @@ import re
 from pydantic import BaseModel
 from sql_engine import execute_query, UnsafeSQLError
 from fastapi import APIRouter, HTTPException
-from llm import generate_sql, classify_intent
+from llm import generate_sql, classify_intent, is_relevant_query
 from superset_client import get_session, get_database_id, get_or_create_dataset, create_chart, create_dashboard
 from typing import Optional
 
@@ -11,28 +11,32 @@ router = APIRouter()
 
 DASHBOARD_KEYWORDS = {"dashboard", "save", "create", "persist", "keep", "store"}
 
-# ── Junk query detection ───────────────────────────────────────────────────────
-# Blocklist: profanity and common nonsense patterns
+# ── Junk query detection — two-stage ────────────────────────────────────────
+# Stage 1 (fast, no API cost): profanity blocklist + pure non-alpha check
+# Stage 2 (LLM, only when stage 1 is uncertain): DeepSeek relevance classifier
 _JUNK_BLOCKLIST = re.compile(
-    r'(fuck|shit|bitch|ass|damn|crap|bastard|dick|piss|cock|cunt|motherfuck\w*)',
+    r'\b(fuck|shit|bitch|ass|damn|crap|bastard|dick|piss|cock|cunt|motherfuck\w*)\b',
     re.IGNORECASE
 )
+_PURE_NONSENSE = re.compile(r'^[^a-zA-Z]*$|^\s*[a-zA-Z]\s*$')
+
 
 def _is_junk_query(query: str) -> bool:
     """
-    Returns True if the query should be rejected before reaching the LLM.
-    Catches:
-      - Profanity / nonsense blocklist matches
-      - Queries with no word of ≥4 alphabetic characters (e.g. "asd", "ppp", "lo")
-    Allows short but valid queries like "top 5 cities" (has "cities" ≥4 chars).
+    Two-stage junk detection:
+    Stage 1 — fast heuristics (no API call):
+      - Profanity blocklist
+      - Pure non-alpha input or single character
+    Stage 2 — LLM relevance check:
+      - Anything that passed stage 1 but looks potentially meaningless
+      - is_relevant_query() defaults to True when uncertain
+    Returns True if the query should be blocked.
     """
     if _JUNK_BLOCKLIST.search(query):
         return True
-    # Extract all purely-alphabetic tokens and check if any is ≥4 chars
-    alpha_words = re.findall(r'[a-zA-Z]{4,}', query)
-    return len(alpha_words) == 0
-
-
+    if _PURE_NONSENSE.match(query.strip()):
+        return True
+    return not is_relevant_query(query)
 # ── chart_exclude parser ───────────────────────────────────────────────────────
 _CHART_EXCLUDE_RE = re.compile(r'--\s*chart_exclude:\s*(.+)$', re.IGNORECASE | re.MULTILINE)
 
@@ -189,7 +193,26 @@ def chat(body: ChatRequest):
                 "sql": sql,
                 "results": results,
                 "chart_exclude_columns": chart_exclude_columns,
+                "table_name": f"{schema}.{table_name}",
                 **dashboard,
+            }
+
+        # Detect clarification response — DeepSeek returns CLARIFY: prefix
+        # when it needs more context before generating SQL.
+        # Surface it as a special intent so the widget renders it conversationally.
+        is_clarification = (
+            len(results) == 1 and
+            list(results[0].keys()) == ["message"] and
+            str(list(results[0].values())[0]).startswith("CLARIFY:")
+        )
+        if is_clarification:
+            clarify_text = str(list(results[0].values())[0])[len("CLARIFY:"):].strip()
+            return {
+                "intent": "clarify",
+                "query": body.query,
+                "sql": None,
+                "results": [{"message": clarify_text}],
+                "chart_exclude_columns": [],
             }
 
         return {
@@ -198,6 +221,7 @@ def chat(body: ChatRequest):
             "sql": sql,
             "results": results,
             "chart_exclude_columns": chart_exclude_columns,
+            "table_name": f"{schema}.{table_name}",
         }
 
     except HTTPException:
