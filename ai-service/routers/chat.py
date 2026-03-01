@@ -11,10 +11,60 @@ router = APIRouter()
 
 DASHBOARD_KEYWORDS = {"dashboard", "save", "create", "persist", "keep", "store"}
 
+# Patterns that indicate a poisoned or junk history entry — reject these
+# before passing history to the LLM so they can't influence SQL generation
+_HISTORY_POISON_PATTERNS = re.compile(
+    r'(SQL executed:|could not find relevant|cannot answer|syntax error|server error|'
+    r'parser error|^\s*[a-z]{1,2}\s*$)',
+    re.IGNORECASE
+)
+
 class ChatRequest(BaseModel):
     query: str
     db_name: str = "DuckDB"
     history: Optional[list[dict]] = None
+
+
+def sanitize_history(history: Optional[list[dict]]) -> list[dict]:
+    """
+    Clean incoming conversation history before passing to the LLM.
+    - Only allow role: user or assistant
+    - Strip entries with poisoned/fallback/error content
+    - Strip entries with suspiciously short content (single chars, flooding)
+    - Cap at 20 entries (last 20 turns)
+    """
+    if not history:
+        return []
+
+    cleaned = []
+    for entry in history:
+        role = entry.get("role", "")
+        content = str(entry.get("content", "")).strip()
+
+        # Only valid roles
+        if role not in ("user", "assistant"):
+            continue
+
+        # Skip empty
+        if not content:
+            continue
+
+        # Skip very short user messages — likely flooding (single chars)
+        if role == "user" and len(content) <= 2:
+            continue
+
+        # Skip poisoned assistant entries
+        if role == "assistant" and _HISTORY_POISON_PATTERNS.search(content):
+            continue
+
+        # Cap individual entry length — no one needs a 10k char history entry
+        content = content[:500]
+
+        cleaned.append({"role": role, "content": content})
+
+    # Keep only the last 20 turns
+    return cleaned[-20:]
+
 
 def extract_table_info(sql: str) -> tuple[str, str]:
     """
@@ -33,10 +83,22 @@ def extract_table_info(sql: str) -> tuple[str, str]:
 
     return "unknown", "main"
 
+
 @router.post("/chat")
 def chat(body: ChatRequest):
     try:
-        query_lower = body.query.lower()
+        query_lower = body.query.strip().lower()
+
+        # Reject suspiciously short or empty queries before hitting the LLM
+        if len(query_lower) <= 1:
+            return {
+                "intent": "explore",
+                "query": body.query,
+                "sql": None,
+                "results": [{"message": "Could not find relevant data for that question."}],
+                "columns": ["message"],
+            }
+
         has_keywords = any(kw in query_lower for kw in DASHBOARD_KEYWORDS)
 
         if has_keywords:
@@ -44,7 +106,10 @@ def chat(body: ChatRequest):
         else:
             intent = "explore"
 
-        sql = generate_sql(body.query, history=body.history)
+        # Sanitize history server-side — never trust raw client history
+        clean_history = sanitize_history(body.history)
+
+        sql = generate_sql(body.query, history=clean_history)
         results = execute_query(sql)
         table_name, schema = extract_table_info(sql)
 

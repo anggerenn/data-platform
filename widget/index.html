@@ -700,7 +700,10 @@ async function sendMessage() {
 
   input.value = '';
   input.style.height = 'auto';
+
+  // Lock immediately — before any await — so rapid taps can't sneak through
   sendBtn.disabled = true;
+  input.disabled = true;
 
   const emptyState = document.getElementById('empty-state');
   if (emptyState) emptyState.remove();
@@ -743,10 +746,19 @@ async function sendMessage() {
       appendError(`Server error ${res.status}: ${errText}`);
     } else {
       const data = await res.json();
-      conversationHistory.push({
-        role: 'assistant',
-        content: `SQL executed: ${data.sql || ''}\nReturned ${data.results?.length || 0} rows.`,
-      });
+
+      // Only push real results to history — never fallback messages.
+      // Storing "SQL executed: ..." was being read as literal SQL by DeepSeek
+      // on subsequent turns (prompt injection). Use a clean neutral string instead.
+      const _results = data.results || [];
+      const _cols = data.columns || (_results.length ? Object.keys(_results[0]) : []);
+      if (!isFallbackResult(_results, _cols) && data.sql) {
+        conversationHistory.push({
+          role: 'assistant',
+          content: 'Queried the data and returned ' + _results.length + ' rows. SQL: ' + data.sql,
+        });
+      }
+
       renderResult(data);
 
       // After message 20's response, trigger session summary
@@ -762,8 +774,12 @@ async function sendMessage() {
       await generateSummary();
     }
   } finally {
-    if (messageCount < MAX_MESSAGES) sendBtn.disabled = false;
-    input.focus();
+    if (messageCount < MAX_MESSAGES) {
+      input.disabled = false;
+      sendBtn.disabled = false;
+      input.focus();
+    }
+    // If at limit: input stays disabled (set permanently below)
   }
 }
 
@@ -867,10 +883,10 @@ function buildFallbackSummary() {
     .map(m => `- ${m.content}`);
 
   const sqlBlocks = conversationHistory
-    .filter(m => m.role === 'assistant' && m.content.includes('SQL executed:'))
+    .filter(m => m.role === 'assistant' && m.content.includes('SQL: '))
     .map(m => {
-      const match = m.content.match(/SQL executed: (.+)/);
-      return match ? match[1] : null;
+      const match = m.content.match(/SQL: ([\s\S]+)/);
+      return match ? match[1].trim() : null;
     })
     .filter(Boolean);
 
