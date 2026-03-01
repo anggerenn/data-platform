@@ -941,7 +941,12 @@ function escapeHtml(str) {
 function isFallbackResult(results, columns) {
   if (results.length === 1 && columns.length === 1 && columns[0] === 'message') {
     const val = String(Object.values(results[0])[0] || '').toLowerCase();
-    if (val.includes('could not find') || val.includes('no relevant') || val.includes('cannot answer')) {
+    if (
+      val.includes('could not find') ||
+      val.includes('no relevant') ||
+      val.includes('cannot answer') ||
+      val.includes('could not be executed')   // duckdb.Error fallback from execute_query()
+    ) {
       return Object.values(results[0])[0];
     }
   }

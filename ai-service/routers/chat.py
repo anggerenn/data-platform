@@ -1,6 +1,6 @@
 import re
 from pydantic import BaseModel
-from sql_engine import execute_query
+from sql_engine import execute_query, UnsafeSQLError
 from fastapi import APIRouter, HTTPException
 from llm import generate_sql, classify_intent
 from superset_client import get_session, get_database_id, get_or_create_dataset, create_chart, create_dashboard
@@ -114,7 +114,17 @@ def chat(body: ChatRequest):
         clean_history = sanitize_history(body.history)
 
         sql = generate_sql(body.query, history=clean_history)
-        results = execute_query(sql)
+
+        # UnsafeSQLError is raised by validate_sql() inside execute_query()
+        # for non-SELECT statements. Return 400 with a clear message.
+        try:
+            results = execute_query(sql)
+        except UnsafeSQLError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        # duckdb.Error is now caught inside execute_query() and returned as a
+        # fallback row — it will NOT raise here. Only truly unexpected errors reach
+        # the outer except below.
+
         table_name, schema = extract_table_info(sql)
 
         if intent == "dashboard":
@@ -138,5 +148,7 @@ def chat(body: ChatRequest):
             "results": results,
         }
 
+    except HTTPException:
+        raise  # re-raise explicit HTTP exceptions unchanged
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

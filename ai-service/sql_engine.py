@@ -71,7 +71,9 @@ def clean_results(records: list[dict]) -> list[dict]:
 def execute_query(sql: str) -> list[dict]:
     """
     Validates and executes a SQL query against DuckDB.
-    Only SELECT/WITH queries are permitted — raises UnsafeSQLError otherwise.
+    - Raises UnsafeSQLError for non-SELECT statements (caught upstream in chat.py).
+    - Returns a structured fallback row on DuckDB execution errors so the widget
+      renders a friendly message instead of a 500.
     """
     validate_sql(sql)
 
@@ -79,6 +81,10 @@ def execute_query(sql: str) -> list[dict]:
     try:
         result = con.execute(sql).fetchdf()
         return clean_results(result.to_dict(orient="records"))
+    except duckdb.Error as e:
+        # Return a fallback row — same shape as the LLM fallback so isFallbackResult()
+        # in the widget handles it correctly and renders as a plain text message.
+        return [{"message": f"The query could not be executed: {e}"}]
     finally:
         con.close()
 

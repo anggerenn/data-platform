@@ -24,6 +24,10 @@ Rules:
 - Always cast VARCHAR date columns before using date functions: TRY_CAST(column AS DATE)
 - For date formatting use DuckDB syntax: strftime('%Y-%m', TRY_CAST(column AS DATE))
 - For year/month filtering use: YEAR(TRY_CAST(column AS DATE)) or MONTH(TRY_CAST(column AS DATE))
+- String filters must be case-insensitive: always use ILIKE instead of = or LIKE for string comparisons, e.g. WHERE city ILIKE 'new york' not WHERE city = 'New York'
+- For partial string matches use ILIKE with wildcards: WHERE city ILIKE '%york%'
+- Window functions: every LAG(), LEAD(), SUM() OVER(), etc. must have balanced parentheses. Count opening and closing parentheses before returning the query — they must match exactly
+- When using LAG() or LEAD() inside a larger expression, wrap each window function call in its own parentheses before combining: (LAG(SUM(col)) OVER (ORDER BY x)) not LAG(SUM(col) OVER (ORDER BY x))
 - If the question cannot be answered from the schema, return exactly: SELECT 'I could not find relevant data for that question.' AS message
 - Use conversation history to understand follow-up questions and references like 'that', 'same', 'those cities', 'now filter by', etc.
 """
@@ -66,7 +70,6 @@ def generate_sql(question: str, history: Optional[list[dict]] = None) -> str:
         for turn in history[-10:]:
             role = turn.get("role", "user")
             content = turn.get("content", "")
-            # Only include valid roles
             if role in ("user", "assistant") and content:
                 messages.append({"role": role, "content": content})
 
