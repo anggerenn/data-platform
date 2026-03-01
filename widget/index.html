@@ -1046,13 +1046,45 @@ function renderResult(data) {
 }
 
 // ─── CHART RENDERER ───────────────────────────────────────
+
+// Aggregate rows that share the same label value — sums numeric cols per group.
+// Used to fix duplicate X-axis labels when results have one row per category per period.
+function aggregateByLabel(labelCol, valueCols, rows) {
+  const order = [];
+  const map = {};
+  for (const row of rows) {
+    const key = String(row[labelCol]);
+    if (!map[key]) {
+      map[key] = {};
+      valueCols.forEach(c => { map[key][c] = 0; });
+      order.push(key);
+    }
+    valueCols.forEach(c => {
+      map[key][c] += parseFloat(row[c]) || 0;
+    });
+  }
+  return { aggLabels: order, aggData: map };
+}
+
+// Detect scale mismatch: returns true if the value cols span very different magnitudes.
+// Threshold: if largest-group max / smallest-group max >= 20, they need separate axes.
+function detectScaleMismatch(valueCols, aggData, aggLabels) {
+  if (valueCols.length < 2) return false;
+  const maxVals = valueCols.map(col =>
+    Math.max(...aggLabels.map(l => Math.abs(aggData[l][col] || 0)))
+  );
+  const maxOfMax = Math.max(...maxVals);
+  const minOfMax = Math.min(...maxVals.filter(v => v > 0));
+  return minOfMax > 0 && (maxOfMax / minOfMax) >= 20;
+}
+
 function renderChart(canvasId, columns, rows) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
   if (chartRegistry.has(canvasId)) chartRegistry.get(canvasId).destroy();
 
-  const sample   = rows[0];
-  const labelCol = columns.find(c => typeof sample[c] === 'string' || isDateLike(sample[c])) || columns[0];
+  const sample    = rows[0];
+  const labelCol  = columns.find(c => typeof sample[c] === 'string' || isDateLike(sample[c])) || columns[0];
   const valueCols = columns.filter(c => c !== labelCol && isNumeric(sample[c]));
 
   if (valueCols.length === 0) {
@@ -1060,29 +1092,75 @@ function renderChart(canvasId, columns, rows) {
     return;
   }
 
-  const labels      = rows.map(r => String(r[labelCol]));
-  const isTimeSeries = labels.some(l => isDateLike(l));
-  const chartType   = isTimeSeries ? 'line' : 'bar';
-  const PALETTE     = ['#e8ff47', '#47d4ff', '#ff6b6b', '#b47fff', '#47ff9c', '#ffb347'];
+  // ── Fix 1: aggregate duplicate X labels ──────────────────
+  const rawLabels = rows.map(r => String(r[labelCol]));
+  const hasDuplicates = rawLabels.length !== new Set(rawLabels).size;
+  const { aggLabels, aggData } = aggregateByLabel(labelCol, valueCols, rows);
+  const chartLabels = hasDuplicates ? aggLabels : rawLabels;
 
-  const datasets = valueCols.slice(0, 3).map((col, i) => {
-    const color = PALETTE[i % PALETTE.length];
+  const isTimeSeries = chartLabels.some(l => isDateLike(l));
+  const chartType    = isTimeSeries ? 'line' : 'bar';
+  const PALETTE      = ['#e8ff47', '#47d4ff', '#ff6b6b', '#b47fff', '#47ff9c', '#ffb347'];
+
+  // ── Fix 2: detect scale mismatch → assign dual Y axes ────
+  const useDualAxis = detectScaleMismatch(valueCols, aggData, aggLabels);
+
+  // Split cols into left axis (large scale) and right axis (small scale)
+  const colMaxVal = col => Math.max(...aggLabels.map(l => Math.abs(aggData[l][col] || 0)));
+  const overallMax = Math.max(...valueCols.map(colMaxVal));
+  // A col belongs on y1 (right) if its max is < 5% of the overall max
+  const isSmallScale = col => useDualAxis && colMaxVal(col) < overallMax * 0.05;
+
+  const datasets = valueCols.slice(0, 4).map((col, i) => {
+    const color  = PALETTE[i % PALETTE.length];
+    const axisId = isSmallScale(col) ? 'y1' : 'y';
+    const data   = hasDuplicates
+      ? aggLabels.map(l => aggData[l][col])
+      : rows.map(r => parseFloat(r[col]) || 0);
     return {
       label: col,
-      data: rows.map(r => parseFloat(r[col]) || 0),
+      data,
+      yAxisID: axisId,
       backgroundColor: chartType === 'bar' ? color + '33' : 'transparent',
       borderColor: color,
       borderWidth: chartType === 'bar' ? 1.5 : 2,
       pointRadius: chartType === 'line' ? 3 : 0,
       pointBackgroundColor: color,
-      fill: chartType === 'line',
+      fill: false,
       tension: 0.35,
     };
   });
 
+  // ── Build scales — only add y1 if actually needed ────────
+  const scaleBase = {
+    ticks: { color: '#444', font: { family: "'JetBrains Mono', monospace", size: 9 }, maxTicksLimit: 5, callback: v => formatNumber(v) },
+    grid:  { color: '#1c1c1c' },
+    border: { color: '#2a2a2a' },
+  };
+  const scales = {
+    x: {
+      ticks: { color: '#444', font: { family: "'JetBrains Mono', monospace", size: 9 }, maxRotation: 30, maxTicksLimit: 8 },
+      grid:  { color: '#1c1c1c' },
+      border: { color: '#2a2a2a' },
+    },
+    y: { ...scaleBase, position: 'left' },
+  };
+  if (useDualAxis) {
+    scales.y1 = {
+      ...scaleBase,
+      position: 'right',
+      grid: { drawOnChartArea: false }, // avoid double gridlines
+      ticks: {
+        ...scaleBase.ticks,
+        color: '#47d4ff', // visually distinguish right axis
+        callback: v => formatNumber(v) + (valueCols.some(c => isSmallScale(c) && c.toLowerCase().includes('pct') || c.toLowerCase().includes('percent') || c.toLowerCase().includes('rate') || c.toLowerCase().includes('growth')) ? '%' : ''),
+      },
+    };
+  }
+
   const chart = new Chart(canvas, {
     type: chartType,
-    data: { labels, datasets },
+    data: { labels: chartLabels, datasets },
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -1104,18 +1182,7 @@ function renderChart(canvasId, columns, rows) {
           callbacks: { label: ctx => ` ${ctx.dataset.label}: ${formatNumber(ctx.raw)}` },
         },
       },
-      scales: {
-        x: {
-          ticks: { color: '#444', font: { family: "'JetBrains Mono', monospace", size: 9 }, maxRotation: 30, maxTicksLimit: 8 },
-          grid: { color: '#1c1c1c' },
-          border: { color: '#2a2a2a' },
-        },
-        y: {
-          ticks: { color: '#444', font: { family: "'JetBrains Mono', monospace", size: 9 }, maxTicksLimit: 5, callback: v => formatNumber(v) },
-          grid: { color: '#1c1c1c' },
-          border: { color: '#2a2a2a' },
-        },
-      },
+      scales,
     },
   });
 
