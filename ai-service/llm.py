@@ -3,102 +3,172 @@ from config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL
 from schema_context import load_schema_context
 from typing import Optional
 
-
-client = OpenAI(
-    api_key=DEEPSEEK_API_KEY,
-    base_url=DEEPSEEK_BASE_URL,
-)
-
-SQL_SYSTEM_PROMPT = """You are a data analyst assistant. You have access to the following database schema:
-
-{schema}
-
-Your job is to convert the user's question into a single valid DuckDB SQL query.
-
-Rules:
-- Return ONLY the SQL query, no explanation, no markdown, no backticks
-- Always use fully qualified table names (schema.table) exactly as shown in the schema — do NOT include [CANONICAL] or [STAGING] labels in the SQL
-- Only use tables and columns listed in the schema above
-- Prefer [CANONICAL] tables for all business questions — but strip the label when writing SQL
-- Only use [STAGING] tables if the user explicitly asks about raw or unaggregated data
-- Do not use INSERT, UPDATE, DELETE, or DROP statements
-- Always cast VARCHAR date columns before using date functions: TRY_CAST(column AS DATE)
-- For date formatting use DuckDB syntax: strftime('%Y-%m', TRY_CAST(column AS DATE))
-- For year/month filtering use: YEAR(TRY_CAST(column AS DATE)) or MONTH(TRY_CAST(column AS DATE))
-- String filters must be case-insensitive: always use ILIKE instead of = or LIKE for string comparisons, e.g. WHERE city ILIKE 'new york' not WHERE city = 'New York'
-- For partial string matches use ILIKE with wildcards: WHERE city ILIKE '%york%'
-
-Window function rules:
-- Window functions like LAG() and LEAD() must ALWAYS operate on pre-aggregated data, never on raw rows
-- When computing month-over-month or period-over-period metrics, always aggregate first (GROUP BY period), then apply the window function in an outer query or CTE
-- Correct pattern:
-    WITH monthly AS (
-        SELECT strftime('%Y-%m', TRY_CAST(date_col AS DATE)) AS month,
-               SUM(value_col) AS total
-        FROM schema.table
-        GROUP BY 1
-    )
-    SELECT month, total,
-           LAG(total) OVER (ORDER BY month) AS prev,
-           (total - LAG(total) OVER (ORDER BY month)) / LAG(total) OVER (ORDER BY month) * 100 AS growth_pct
-    FROM monthly
-    ORDER BY month
-- Every LAG(), LEAD(), SUM() OVER() etc. must have balanced parentheses — count opening and closing parens before returning
-- Wrap each window function call in its own parentheses when combining: (LAG(col) OVER (ORDER BY x)) not LAG(col OVER (ORDER BY x))
-
-Chart exclude rule (IMPORTANT — follow exactly):
-- If the user says they do NOT want to see a column in the chart (e.g. "don't visualize month", "hide city from chart", "no need to show month in chart"), you MUST append this comment as the very last line of your output, after the SQL and after any semicolon:
-  -- chart_exclude: col1, col2
-- This comment is required — do not omit it when the user asks to hide chart columns
-- Example of correct output when user says "show city, month, revenue but hide month from chart":
-  SELECT city, strftime('%Y-%m', TRY_CAST(order_date AS DATE)) AS month, SUM(revenue) AS revenue
-  FROM schema.table
-  GROUP BY city, month
-  ORDER BY city, month;
-  -- chart_exclude: month
-- The comment must appear AFTER the semicolon on its own line, nowhere else
-
-- If the question cannot be answered from the schema, return exactly: SELECT 'I could not find relevant data for that question.' AS message
-
-Context and clarification rules:
-- Use conversation history to understand follow-up questions and references like 'that', 'same', 'those cities', 'now filter by', etc.
-- ONLY carry forward filters, groupings, or table choices from a previous query if the user explicitly references the previous result using words like: 'that', 'same', 'those', 'filter that', 'also', 'now add', 'break that down', 'for the same'
-- If the new question appears to be about a DIFFERENT topic, entity, or metric than the previous query AND does NOT use any of the above reference words, ask the user for clarification instead of guessing
-- To ask for clarification, return exactly this format: SELECT 'CLARIFY: <your question here>' AS message
-- Your clarification question should be short, conversational, and specific — e.g. "Are you still looking at New York, or do you want this for all cities?" or "Should I carry forward the electronics filter from before?"
-- If the user's reply answers the clarification (e.g. "all cities", "yes keep it", "no start fresh"), use that answer to generate the correct SQL
-"""
-
-INTENT_SYSTEM_PROMPT = (
-    "You are an intent classifier. "
-    "Classify the user's message as either 'dashboard' or 'explore'. "
-    "Return 'dashboard' only if the user explicitly wants to save, create, or persist a dashboard. "
-    "Return 'explore' if they just want to see or explore data. "
-    "Reply with a single word: dashboard or explore."
-)
-
-RELEVANCE_SYSTEM_PROMPT = (
-    "You are a query relevance classifier for a data analytics assistant. "
-    "Determine if the user's message is a genuine data or analytics question that can be answered with SQL. "
-    "Return 'relevant' if the message is asking about data, metrics, trends, filters, or follow-up analytical questions. "
-    "Return 'irrelevant' if the message is: random characters, nonsense, profanity, off-topic conversation, "
-    "or anything that cannot reasonably be answered with a database query. "
-    "When in doubt, return 'relevant'. "
-    "Reply with a single word: relevant or irrelevant."
-)
+client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL)
 
 
-def _chat_completion(system: str, user: str) -> str:
+# ─────────────────────────────────────────────────────────────────────────────
+# SHARED HELPER
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _chat(system: str, user: str, temperature: float = 0) -> str:
     response = client.chat.completions.create(
         model=DEEPSEEK_MODEL,
         messages=[
             {"role": "system", "content": system},
-            {"role": "user", "content": user},
+            {"role": "user",   "content": user},
         ],
-        temperature=0,
+        temperature=temperature,
     )
     return response.choices[0].message.content.strip()
 
+
+def _chat_with_history(system: str, history: list[dict], question: str, temperature: float = 0) -> str:
+    messages = [{"role": "system", "content": system}]
+    for turn in history:
+        role    = turn.get("role", "user")
+        content = turn.get("content", "")
+        if role in ("user", "assistant") and content:
+            messages.append({"role": role, "content": content})
+    messages.append({"role": "user", "content": question})
+    response = client.chat.completions.create(
+        model=DEEPSEEK_MODEL,
+        messages=messages,
+        temperature=temperature,
+    )
+    return response.choices[0].message.content.strip()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AGENT 1 — RELEVANCE
+# Single job: is this a genuine analytics question?
+# Called by Captain before anything else — cheapest possible gate.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_RELEVANCE_PROMPT = (
+    "You are a relevance filter for a data analytics assistant. "
+    "Decide if the user's message is a genuine data or analytics question answerable with SQL. "
+    "Return 'relevant' for questions about data, metrics, trends, filters, or follow-up analytics. "
+    "Return 'irrelevant' for random characters, nonsense, profanity, or off-topic conversation. "
+    "When in doubt, return 'relevant'. "
+    "Reply with exactly one word: relevant or irrelevant."
+)
+
+def is_relevant_query(message: str) -> bool:
+    """Returns False only when DeepSeek is confident the message is not a data question."""
+    result = _chat(_RELEVANCE_PROMPT, message)
+    return "irrelevant" not in result.lower()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AGENT 2 — INTENT
+# Single job: explore or dashboard?
+# ─────────────────────────────────────────────────────────────────────────────
+
+_INTENT_PROMPT = (
+    "You are an intent classifier for a data analytics assistant. "
+    "Classify the user's message as 'dashboard' or 'explore'. "
+    "Return 'dashboard' only if the user explicitly wants to save, create, or persist a dashboard. "
+    "Return 'explore' for everything else. "
+    "Reply with exactly one word: dashboard or explore."
+)
+
+def classify_intent(message: str) -> str:
+    result = _chat(_INTENT_PROMPT, message)
+    return "dashboard" if "dashboard" in result.lower() else "explore"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AGENT 3 — CLARIFY
+# Single job: is the filter/scope ambiguous given history?
+# Runs BEFORE SQL so it can stop the pipeline early.
+# Only asks about data scope — never about chart preferences or formatting.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_CLARIFY_PROMPT = """You are a context checker for a data analytics assistant.
+
+Your only job: decide if the new question has AMBIGUOUS filter or scope carryover from the conversation history.
+
+Rules:
+- Return a clarification question ONLY if:
+  (a) The previous query had a specific filter (city, date range, category, customer, etc.), AND
+  (b) The new question is about a different metric or topic, AND
+  (c) The user did NOT use reference words like: that, same, those, also, filter that, break that down, for the same
+- If any of those reference words are present, do NOT clarify — the user wants to carry context forward
+- If the new question is self-contained and unambiguous, do NOT clarify
+- If there is no meaningful history, do NOT clarify
+- Your question must be short, specific, and about data scope only — never about charts, columns, or formatting
+- Good example: "Are you still filtering for New York, or should this cover all cities?"
+- Bad example: "Should I exclude any columns from the chart?" — never ask this
+
+Return format:
+- If clarification is needed: return only the question text, nothing else
+- If no clarification needed: return exactly the word NONE
+"""
+
+def should_clarify(question: str, history: list[dict]) -> Optional[str]:
+    """
+    Returns a clarification question string if scope is ambiguous, else None.
+    Captain calls this before SQL agent — if it returns a question, pipeline stops.
+    """
+    if not history:
+        return None
+
+    # Build a compact history summary for the clarify agent
+    history_text = "\n".join(
+        f"[{t['role'].upper()}]: {t['content']}"
+        for t in history[-6:]
+        if t.get("role") in ("user", "assistant") and t.get("content")
+    )
+
+    prompt = f"Conversation history:\n{history_text}\n\nNew question: {question}"
+    result = _chat(_CLARIFY_PROMPT, prompt).strip()
+
+    if result.upper() == "NONE" or not result:
+        return None
+    return result
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AGENT 4 — SQL
+# Single job: convert question to a single valid DuckDB SELECT query.
+# No chart logic, no clarification logic, no intent logic — just SQL.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_SQL_PROMPT = """You are a SQL generation expert for DuckDB. Convert the user's question into a single valid DuckDB SELECT query.
+
+Schema:
+{schema}
+
+Rules:
+- Return ONLY a single SQL query — no explanations, no markdown, no backticks, no multiple statements
+- Use fully qualified table names (schema.table) exactly as shown — strip [CANONICAL] and [STAGING] labels
+- Only use tables and columns from the schema above
+- Prefer [CANONICAL] tables for business questions; use [STAGING] only if user asks for raw data
+- No INSERT, UPDATE, DELETE, DROP statements
+- Cast VARCHAR dates: TRY_CAST(column AS DATE)
+- Date format: strftime('%Y-%m', TRY_CAST(column AS DATE))
+- Year/month filter: YEAR(TRY_CAST(column AS DATE)) or MONTH(TRY_CAST(column AS DATE))
+- String filters: always ILIKE (case-insensitive), e.g. WHERE city ILIKE 'new york'
+- Partial matches: WHERE city ILIKE '%york%'
+
+Window function rules:
+- LAG() and LEAD() must operate on pre-aggregated data — never on raw rows
+- Always aggregate in a CTE first, then apply window functions in the outer SELECT:
+    WITH agg AS (
+        SELECT strftime('%Y-%m', TRY_CAST(date_col AS DATE)) AS month,
+               SUM(value) AS total
+        FROM schema.table GROUP BY 1
+    )
+    SELECT month, total,
+           LAG(total) OVER (ORDER BY month) AS prev,
+           (total - LAG(total) OVER (ORDER BY month))
+             / LAG(total) OVER (ORDER BY month) * 100 AS growth_pct
+    FROM agg ORDER BY month
+- Count parentheses — opening and closing must match exactly
+
+If the question cannot be answered from the schema, return exactly:
+SELECT 'I could not find relevant data for that question.' AS message
+"""
 
 def clean_sql(sql: str) -> str:
     sql = sql.strip()
@@ -107,51 +177,78 @@ def clean_sql(sql: str) -> str:
         sql = sql.rsplit("```", 1)[0]
     return sql.strip()
 
-
 def generate_sql(question: str, history: Optional[list[dict]] = None) -> str:
-    schema = load_schema_context()
-    messages = [{"role": "system", "content": SQL_SYSTEM_PROMPT.format(schema=schema)}]
+    schema   = load_schema_context()
+    system   = _SQL_PROMPT.format(schema=schema)
+    history  = history or []
+    raw      = _chat_with_history(system, history[-6:], question)
+    return clean_sql(raw)
 
-    if history:
-        for turn in history[-10:]:
-            role = turn.get("role", "user")
-            content = turn.get("content", "")
-            if role in ("user", "assistant") and content:
-                messages.append({"role": role, "content": content})
 
-    messages.append({"role": "user", "content": question})
+# ─────────────────────────────────────────────────────────────────────────────
+# AGENT 5 — VISUAL
+# Single job: given column names + a sample row, decide which columns to
+# exclude from the chart. Returns a list of column names to exclude.
+# Called only when results have numeric columns — skipped otherwise.
+# ─────────────────────────────────────────────────────────────────────────────
 
-    response = client.chat.completions.create(
-        model=DEEPSEEK_MODEL,
-        messages=messages,
-        temperature=0,
+_VISUAL_PROMPT = """You are a chart configuration assistant.
+
+Given a user's question, the result column names, and the user's explicit chart preferences,
+decide which columns (if any) should be excluded from the chart visualization.
+
+Rules:
+- Only exclude a column if the user EXPLICITLY said they don't want it in the chart
+  (e.g. "exclude rank", "don't visualize month", "hide city from chart")
+- Do NOT exclude columns based on your own judgement — only act on explicit user instructions
+- If the user said nothing about chart exclusions, return an empty list
+- Return ONLY a JSON array of column name strings to exclude, e.g. ["rank"] or ["month", "city"] or []
+- No explanation, no markdown, just the JSON array
+"""
+
+def plan_visualization(question: str, columns: list[str]) -> list[str]:
+    """
+    Returns a list of column names to exclude from the chart.
+    Only called when the result has numeric columns worth charting.
+    """
+    user_msg = (
+        f"User question: {question}\n"
+        f"Result columns: {', '.join(columns)}\n"
+        "Which columns (if any) did the user explicitly ask to exclude from the chart?"
     )
-    return clean_sql(response.choices[0].message.content.strip())
+    result = _chat(_VISUAL_PROMPT, user_msg)
+    result = result.strip()
 
-
-def classify_intent(message: str) -> str:
-    result = _chat_completion(INTENT_SYSTEM_PROMPT, message)
-    return "dashboard" if "dashboard" in result.lower() else "explore"
-
-
-def is_relevant_query(message: str) -> bool:
-    """
-    Uses DeepSeek to determine if the message is a genuine analytics question.
-    Returns False for random characters, nonsense, off-topic content.
-    Called only when the fast heuristic guard is uncertain.
-    """
-    result = _chat_completion(RELEVANCE_SYSTEM_PROMPT, message)
-    return "irrelevant" not in result.lower()
+    # Parse JSON array — fall back to empty list on any parse error
+    import json, re
+    match = re.search(r'\[.*?\]', result, re.DOTALL)
+    if match:
+        try:
+            excluded = json.loads(match.group())
+            if isinstance(excluded, list):
+                return [str(c) for c in excluded]
+        except (json.JSONDecodeError, ValueError):
+            pass
+    return []
 
 
 if __name__ == "__main__":
-    print("--- generate_sql ---")
+    print("=== Agent smoke tests ===\n")
+
+    print("1. Relevance:")
+    print("  'asdfgh'         →", is_relevant_query("asdfgh"))
+    print("  'top 5 cities'   →", is_relevant_query("top 5 cities"))
+
+    print("\n2. Intent:")
+    print("  'show revenue'           →", classify_intent("show revenue"))
+    print("  'create a dashboard'     →", classify_intent("create a dashboard"))
+
+    print("\n3. SQL:")
     print(generate_sql("What are the top 5 cities by total revenue?"))
 
-    print("\n--- classify_intent ---")
-    print(classify_intent("Create a dashboard for top cities by revenue"))
-    print(classify_intent("What are the top 5 cities by total revenue?"))
-
-    print("\n--- is_relevant_query ---")
-    print(is_relevant_query("asdfgh"))
-    print(is_relevant_query("top cities revenue"))
+    print("\n4. Visual:")
+    print("  'rank customers, exclude rank from chart', [customer_id, total, rank] →",
+          plan_visualization("rank customers, exclude rank from chart",
+                             ["customer_id", "total_order_value", "rank"]))
+    print("  'show monthly revenue', [month, revenue] →",
+          plan_visualization("show monthly revenue", ["month", "revenue"]))
