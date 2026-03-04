@@ -8,7 +8,6 @@ default:
       port: "{{ env_var('CLICKHOUSE_PORT') | int }}"
       user: "{{ env_var('CLICKHOUSE_USER') }}"
       password: "{{ env_var('CLICKHOUSE_PASSWORD') }}"
-      database: "{{ env_var('CLICKHOUSE_DB') }}"
       secure: false
       verify: false
       connect_timeout: 10

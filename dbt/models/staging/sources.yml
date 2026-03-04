@@ -3,8 +3,11 @@ version: 2
 sources:
   - name: raw
     description: "Raw data ingested by dlt"
+    schema: default
     tables:
       - name: orders
+        identifier: raw___orders
         description: "Raw orders data"
       - name: customers
+        identifier: raw___customers
         description: "Raw customers data"
