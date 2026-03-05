@@ -19,6 +19,7 @@ from pydantic_ai.messages import (
 )
 
 from agent import AgentDeps, agent
+from agents.data_visualizer import get_chart_spec
 from vn import get_vanna
 
 flask_app = Flask(__name__)
@@ -121,10 +122,21 @@ def chat():
         )
         new_msgs = _strip_explore_rows(result.new_messages())
         sessions[session_id] = sessions.get(session_id, []) + new_msgs
-        return jsonify({
-            **result.output.model_dump(),
-            "session_id": session_id,
-        })
+
+        output = result.output.model_dump()
+
+        # Enrich explore results with a server-side chart spec
+        if (
+            result.output.intent == 'explore'
+            and result.output.columns
+            and result.output.data
+        ):
+            spec = asyncio.run(get_chart_spec(result.output.columns, result.output.data))
+            output['chart_spec'] = spec.model_dump()
+        else:
+            output['chart_spec'] = None
+
+        return jsonify({**output, "session_id": session_id})
     except Exception as e:
         return jsonify({
             "intent": "explore",

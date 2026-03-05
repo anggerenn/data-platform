@@ -525,42 +525,9 @@
 
   const CHART_COLORS = ['#7262ff','#ff6b6b','#ffd93d','#6bcb77','#4d96ff','#ff922b','#cc5de8'];
 
-  function detectChart(columns, data) {
-    if (!data || data.length < 2) return null;
-    const s = data[0];
-
-    const isDateVal = v => typeof v === 'string' && /^\d{4}-\d{2}/.test(v);
-    const isNumVal  = v => typeof v === 'number';
-    const isStrVal  = v => typeof v === 'string' && !/^\d{4}-\d{2}/.test(v);
-
-    const dateCols = columns.filter(c => isDateVal(s[c]));
-    const numCols  = columns.filter(c => isNumVal(s[c]));
-    const strCols  = columns.filter(c => isStrVal(s[c]));
-
-    // 4+ columns — too complex for a chart
-    if (columns.length > 3) return null;
-
-    // Grouped bar: exactly date + 1 category + 1 numeric (e.g. month × city × revenue)
-    if (dateCols.length === 1 && strCols.length === 1 && numCols.length === 1) {
-      return { type: 'bar_grouped', xCol: dateCols[0], groupCol: strCols[0], yCol: numCols[0] };
-    }
-
-    // Time series: date x-axis, up to 2 numeric y-series
-    if (dateCols.length === 1 && numCols.length >= 1) {
-      return { type: 'line', xCol: dateCols[0], yCols: numCols.slice(0, 2) };
-    }
-
-    // Bar chart: single categorical x-axis
-    if (strCols.length === 1 && numCols.length >= 1 && dateCols.length === 0 && data.length <= 25) {
-      return { type: 'bar', xCol: strCols[0], yCol: numCols[0] };
-    }
-
-    return null;
-  }
-
-  function renderChart(columns, data) {
-    const spec = detectChart(columns, data);
-    if (!spec || typeof Plotly === 'undefined') return null;
+  function renderChart(columns, data, chartSpec) {
+    if (!chartSpec || !chartSpec.type || typeof Plotly === 'undefined') return null;
+    const spec = chartSpec;
 
     const el = document.createElement('div');
     el.className = 'chart-wrap';
@@ -586,8 +553,9 @@
     let traces = [];
 
     if (spec.type === 'line') {
-      traces = spec.yCols.map((yCol, i) => ({
-        x: data.map(r => r[spec.xCol]),
+      const yCols = spec.y_cols || (spec.y ? [spec.y] : []);
+      traces = yCols.map((yCol, i) => ({
+        x: data.map(r => r[spec.x]),
         y: data.map(r => r[yCol]),
         type: 'scatter', mode: 'lines+markers',
         name: yCol,
@@ -597,13 +565,13 @@
       if (traces.length > 1) { layout.showlegend = true; layout.legend = { font: { size: 9 }, orientation: 'h', x: 0, y: 1.05, xanchor: 'left', yanchor: 'bottom' }; layout.margin.t = 32; }
     }
 
-    if (spec.type === 'bar_grouped') {
-      const groups = [...new Set(data.map(r => r[spec.groupCol]))];
+    if (spec.type === 'grouped_bar') {
+      const groups = [...new Set(data.map(r => r[spec.group]))].slice(0, 5);
       traces = groups.map((g, i) => {
-        const rows = data.filter(r => r[spec.groupCol] === g);
+        const rows = data.filter(r => r[spec.group] === g);
         return {
-          x: rows.map(r => r[spec.xCol]),
-          y: rows.map(r => r[spec.yCol]),
+          x: rows.map(r => r[spec.x]),
+          y: rows.map(r => r[spec.y]),
           name: g, type: 'bar',
           marker: { color: CHART_COLORS[i % CHART_COLORS.length] },
         };
@@ -616,11 +584,34 @@
 
     if (spec.type === 'bar') {
       traces = [{
-        x: data.map(r => r[spec.xCol]),
-        y: data.map(r => r[spec.yCol]),
+        x: data.map(r => r[spec.x]),
+        y: data.map(r => r[spec.y]),
         type: 'bar',
         marker: { color: CHART_COLORS[0] },
       }];
+    }
+
+    if (spec.type === 'heatmap') {
+      const xVals = [...new Set(data.map(r => r[spec.x]))];
+      const yVals = [...new Set(data.map(r => r[spec.group]))];
+      const z = yVals.map(yv => xVals.map(xv => {
+        const row = data.find(r => r[spec.x] === xv && r[spec.group] === yv);
+        return row ? row[spec.y] : null;
+      }));
+      traces = [{ type: 'heatmap', x: xVals, y: yVals, z, colorscale: 'Purples' }];
+      layout.margin.b = 70;
+    }
+
+    if (spec.type === 'kpi') {
+      const val = data[0][spec.y] ?? Object.values(data[0])[0];
+      const formatted = typeof val === 'number'
+        ? val.toLocaleString(undefined, { maximumFractionDigits: 2 })
+        : val;
+      const kpiEl = document.createElement('div');
+      kpiEl.className = 'chart-wrap';
+      kpiEl.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;padding:18px 12px;';
+      kpiEl.innerHTML = `<div style="font-size:11px;color:#888;margin-bottom:4px">${spec.title || spec.y || columns[0]}</div><div style="font-size:32px;font-weight:700;color:#7262ff">${formatted}</div>`;
+      return kpiEl;
     }
 
     Plotly.newPlot(el, traces, layout, config);
@@ -632,9 +623,9 @@
   function renderResult(result) {
     const wrap = document.createElement('div');
 
-    // Chart first (explore only)
-    if (result.data && result.data.length >= 2 && result.columns) {
-      const chartEl = renderChart(result.columns, result.data);
+    // Chart first (explore only) — spec decided server-side by Data Visualizer Agent
+    if (result.data && result.data.length >= 1 && result.columns && result.chart_spec) {
+      const chartEl = renderChart(result.columns, result.data, result.chart_spec);
       if (chartEl) wrap.appendChild(chartEl);
     }
 
@@ -811,6 +802,14 @@
     appendMessage('user', question);
     const typingBubble = showTyping();
 
+    const slowHintTimer = setTimeout(() => {
+      const hint = document.createElement('div');
+      hint.style.cssText = 'font-size:11px;color:#aaa;margin-top:6px;';
+      hint.textContent = 'Taking longer than usual — hang tight...';
+      typingBubble.querySelector('.typing-wrap').insertAdjacentElement('afterend', hint);
+      scrollToBottom();
+    }, 8000);
+
     currentAbort = new AbortController();
 
     let atLimit = false;
@@ -851,6 +850,7 @@
         console.error(err);
       }
     } finally {
+      clearTimeout(slowHintTimer);
       currentAbort = null;
       document.getElementById('stop-btn').style.display = 'none';
       document.getElementById('send-btn').style.display = '';
