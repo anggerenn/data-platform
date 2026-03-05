@@ -11,7 +11,7 @@ def run_dbt():
 
     for cmd in [["dbt", "run"], ["dbt", "docs", "generate"]]:
         result = subprocess.run(
-            cmd + ["--project-dir", dbt_dir, "--profiles-dir", dbt_dir],
+            cmd + ["--project-dir", dbt_dir, "--profiles-dir", dbt_dir, "--log-path", "/tmp/dbt-logs", "--target-path", "/tmp/dbt-target"],
             capture_output=True,
             text=True
         )

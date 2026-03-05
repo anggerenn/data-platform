@@ -13,13 +13,19 @@ if [ -z "$LIGHTDASH_API_KEY" ]; then
     -d "{\"firstName\":\"Admin\",\"lastName\":\"User\",\"email\":\"${LIGHTDASH_EMAIL}\",\"password\":\"${LIGHTDASH_PASSWORD}\"}" \
     -o /dev/null \
     && echo "         User registered." \
-    || echo "         User already exists."
+    || {
+      echo "         User already exists — logging in to get session cookie..."
+      curl -sf -c "$COOKIE_JAR" -X POST "${LIGHTDASH_URL}/api/v1/login" \
+        -H "Content-Type: application/json" \
+        -d "{\"email\":\"${LIGHTDASH_EMAIL}\",\"password\":\"${LIGHTDASH_PASSWORD}\"}" \
+        -o /dev/null
+    }
 
-  echo "    Step 2: Create organisation..."
-  curl -sf -b "$COOKIE_JAR" -X PUT "${LIGHTDASH_URL}/api/v1/org" \
+  echo "    Step 2: Create organisation (skip if already exists)..."
+  curl -s -b "$COOKIE_JAR" -X PUT "${LIGHTDASH_URL}/api/v1/org" \
     -H "Content-Type: application/json" \
     -d '{"name":"Analytics"}' \
-    -o /dev/null
+    -o /dev/null || true
 
   echo "    Step 3: Re-login to refresh session with org context..."
   curl -sf -c "$COOKIE_JAR" -X POST "${LIGHTDASH_URL}/api/v1/login" \

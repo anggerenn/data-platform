@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y curl && \
     apt-get install -y nodejs && \
     apt-get clean
 
-COPY requirements.txt /tmp/requirements.txt
+COPY requirements.prefect.txt /tmp/requirements.txt
 RUN pip install -r /tmp/requirements.txt
 
 WORKDIR /opt/prefect
