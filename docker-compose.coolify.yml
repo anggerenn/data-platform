@@ -3,16 +3,34 @@ services:
     exclude_from_hc: true
     volumes:
       - /data:/data
+
   clickhouse:
     exclude_from_hc: true
     volumes:
       - /data/clickhouse:/var/lib/clickhouse
+      # File-level mount: injects readonly user without shadowing default-user.xml
+      - ./clickhouse/users.d/bi_readonly.xml:/etc/clickhouse-server/users.d/bi_readonly.xml
+
+  minio:
+    exclude_from_hc: true
+
+  minio-init:
+    exclude_from_hc: true
+
+  postgres:
+    exclude_from_hc: true
+
   lightdash-db:
     exclude_from_hc: true
-  postgres:
-    exclude_from_hc: true 
+
   lightdash:
     # platform: linux/amd64 is inherited from base — native amd64 on VPS, no emulation needed
     platform: linux/amd64
+
   lightdash-deploy:
     exclude_from_hc: true
+
+  vanna:
+    exclude_from_hc: true
+    volumes:
+      - /data:/data

@@ -1,0 +1,15 @@
+<clickhouse>
+    <users>
+        <bi_readonly>
+            <!-- Password loaded from env var at container startup -->
+            <password from_env="CLICKHOUSE_READONLY_PASSWORD"/>
+            <networks>
+                <!-- Allow connections from any host inside the Docker network -->
+                <ip>::/0</ip>
+            </networks>
+            <!-- Built-in readonly profile: sets readonly=1 (SELECT/SHOW only, no writes) -->
+            <profile>readonly</profile>
+            <quota>default</quota>
+        </bi_readonly>
+    </users>
+</clickhouse>
