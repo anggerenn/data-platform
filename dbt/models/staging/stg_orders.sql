@@ -3,7 +3,7 @@
 SELECT
     order_id,
     customer_id,
-    order_date,
+    toDate(order_date) AS order_date,
     category,
     city,
     amount,

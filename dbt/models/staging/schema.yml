@@ -9,7 +9,9 @@ models:
       - name: customer_id
         description: "Unique customer identifier"
       - name: order_date
-        description: "Date the order was placed"
+        description: "Date the order was placed (Date type — cast via toDate() from raw string)"
+        tests:
+          - not_null
       - name: category
         description: "Product category"
       - name: city

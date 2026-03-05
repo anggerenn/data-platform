@@ -7,7 +7,7 @@ models:
     description: "Aggregated daily sales by date, category and city"
     columns:
       - name: order_date
-        description: "Date of the order"
+        description: "Date of the order (Date type — inherited from stg_orders cast)"
         tests:
           - not_null
       - name: category
