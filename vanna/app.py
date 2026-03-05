@@ -2,15 +2,15 @@ import asyncio
 import dataclasses
 import json
 import os
+import uuid
 
 from dotenv import load_dotenv
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 from pydantic_ai.messages import (
     ModelMessage,
-    ModelMessagesTypeAdapter,
     ModelRequest,
     ModelResponse,
     ToolCallPart,
@@ -27,7 +27,11 @@ vn = get_vanna()
 _STATIC_DIR = os.path.join(os.path.dirname(__file__), 'static')
 _LIGHTDASH_URL = os.environ.get('LIGHTDASH_PUBLIC_URL', 'http://localhost:8080')
 
-MAX_HISTORY = 20  # sliding window: keep last N messages
+MAX_HISTORY = 20  # sliding window: keep last N messages per session
+
+# Server-side session store: session_id → list[ModelMessage]
+# Resets on container restart — acceptable for short-lived chat sessions
+sessions: dict[str, list[ModelMessage]] = {}
 
 
 def _strip_explore_rows(messages: list[ModelMessage]) -> list[ModelMessage]:
@@ -86,13 +90,12 @@ def _trim_to_user_turn(messages: list[ModelMessage]) -> list[ModelMessage]:
     return []
 
 
-def _process_history(raw_history: list) -> list[ModelMessage]:
-    """Deserialize, apply sliding window, strip rows/data, and ensure clean start."""
-    if not raw_history:
+def _get_session(session_id: str) -> list[ModelMessage]:
+    """Return the trimmed history for a session."""
+    msgs = sessions.get(session_id, [])
+    if not msgs:
         return []
-    messages = list(ModelMessagesTypeAdapter.validate_python(raw_history))
-    windowed = _strip_explore_rows(messages[-MAX_HISTORY:])
-    return _trim_to_user_turn(windowed)
+    return _trim_to_user_turn(_strip_explore_rows(msgs[-MAX_HISTORY:]))
 
 
 @flask_app.route('/', methods=['GET'])
@@ -109,24 +112,51 @@ def chat():
     if not question:
         return jsonify({"error": "message required"}), 400
 
-    history = _process_history(body.get('history', []))
+    session_id = body.get('session_id') or str(uuid.uuid4())
+    history = _get_session(session_id)
 
     try:
         result = asyncio.run(
             agent.run(question, deps=AgentDeps(vanna=vn), message_history=history)
         )
         new_msgs = _strip_explore_rows(result.new_messages())
+        sessions[session_id] = sessions.get(session_id, []) + new_msgs
         return jsonify({
             **result.output.model_dump(),
-            "new_messages": json.loads(ModelMessagesTypeAdapter.dump_json(new_msgs)),
+            "session_id": session_id,
         })
     except Exception as e:
         return jsonify({
             "intent": "explore",
             "text": f"Something went wrong: {e}",
             "sql": None, "data": None, "columns": None, "row_count": None,
-            "new_messages": [],
+            "session_id": session_id,
         })
+
+
+@flask_app.route('/feedback', methods=['POST'])
+def feedback():
+    body = request.get_json()
+    question = (body.get('question') or '').strip()
+    sql = (body.get('sql') or '').strip()
+    rating = body.get('rating')  # 'up' or 'down'
+
+    if not question or not sql or rating not in ('up', 'down'):
+        return jsonify({"error": "question, sql, and rating required"}), 400
+
+    if rating == 'up':
+        try:
+            vn.train(question=question, sql=sql)
+            return jsonify({"status": "trained"})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    else:
+        from datetime import datetime, timezone
+        entry = {"question": question, "sql": sql, "timestamp": datetime.now(timezone.utc).isoformat()}
+        feedback_path = os.environ.get('FEEDBACK_PATH', '/data/vanna-feedback.jsonl')
+        with open(feedback_path, 'a') as f:
+            f.write(json.dumps(entry) + '\n')
+        return jsonify({"status": "recorded"})
 
 
 @flask_app.route('/health', methods=['GET'])
