@@ -154,6 +154,33 @@ services:
       retries: 10
       start_period: 60s
 
+  # Runs dlt ingestion + dbt transformation on every deployment
+  pipeline-init:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.prefect
+    depends_on:
+      prefect-server:
+        condition: service_healthy
+      clickhouse:
+        condition: service_started
+    environment:
+      PREFECT_API_URL: "http://prefect-server:4200/api"
+      ANALYTICS_PIPELINES_DIR: "/data/pipelines"
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: ${CLICKHOUSE_PORT:-8123}
+      CLICKHOUSE_NATIVE_PORT: ${CLICKHOUSE_NATIVE_PORT:-9000}
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-default}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+    volumes:
+      - ~/data:/data
+      - ./dbt:/opt/prefect/dbt:ro
+    command: python /opt/prefect/prefect/flows/main_pipeline.py
+    networks:
+      - data-network
+    restart: "no"
+
   # One-time manual first-boot (free self-hosted Lightdash limitation):
   #   1. Visit http://localhost:8080/register and create your admin account
   #   2. Go to Settings → Personal Access Tokens → generate a token
@@ -208,6 +235,23 @@ services:
     networks:
       - data-network
     restart: unless-stopped
+
+  # Runs smoke test after pipeline + lightdash-deploy complete
+  smoke-test:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.vanna
+    depends_on:
+      pipeline-init:
+        condition: service_completed_successfully
+      lightdash-deploy:
+        condition: service_completed_successfully
+      vanna:
+        condition: service_started
+    command: python /app/smoke_test.py --url http://vanna:8084
+    networks:
+      - data-network
+    restart: "no"
 
 volumes:
   postgres_data:
