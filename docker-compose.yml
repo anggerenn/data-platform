@@ -62,15 +62,47 @@ services:
       CLICKHOUSE_DB: ${CLICKHOUSE_DB:-default}
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-changeme}
+      # Readonly user password — loaded by users.d/bi_readonly.xml at startup
+      CLICKHOUSE_READONLY_PASSWORD: ${CLICKHOUSE_READONLY_PASSWORD}
     mem_limit: 2g
     volumes:
       - ~/data/clickhouse:/var/lib/clickhouse
+      # File-level mount: injects our user without shadowing default-user.xml
+      - ./clickhouse/users.d/bi_readonly.xml:/etc/clickhouse-server/users.d/bi_readonly.xml
     ports:
       - "8123:8123"
       - "9000:9000"
     networks:
       - data-network
     restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - ~/data/minio:/data
+    ports:
+      - "9001:9001"   # console UI
+    command: server /data --console-address ":9001"
+    networks:
+      - data-network
+    restart: unless-stopped
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+        sleep 5 &&
+        mc alias set local http://minio:9000 $${MINIO_ROOT_USER:-minioadmin} $${MINIO_ROOT_PASSWORD:-minioadmin} &&
+        mc mb --ignore-existing local/lightdash
+      "
+    networks:
+      - data-network
+    restart: "no"
 
   lightdash-db:
     image: postgres:15
@@ -101,6 +133,12 @@ services:
       - LIGHTDASH_SECRET=${LIGHTDASH_SECRET:-changeme}
       - LIGHTDASH_SECURE_COOKIES=false
       - DBT_PROJECT_DIR=/usr/app/dbt
+      - S3_ENDPOINT=http://minio:9000
+      - S3_BUCKET=lightdash
+      - S3_REGION=us-east-1
+      - S3_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
+      - S3_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
+      - S3_FORCE_PATH_STYLE=true
     ports:
       - "8080:8080"
     volumes:
@@ -133,8 +171,9 @@ services:
     environment:
       - CLICKHOUSE_HOST=clickhouse
       - CLICKHOUSE_PORT=${CLICKHOUSE_PORT:-8123}
-      - CLICKHOUSE_USER=${CLICKHOUSE_USER:-default}
-      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-changeme}
+      # Readonly user: stored in Lightdash's DB and used by the web app for all queries
+      - CLICKHOUSE_USER=bi_readonly
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_READONLY_PASSWORD}
       - LIGHTDASH_URL=http://lightdash:8080
       - LIGHTDASH_EMAIL=${LIGHTDASH_EMAIL}
       - LIGHTDASH_PASSWORD=${LIGHTDASH_PASSWORD}
@@ -146,6 +185,28 @@ services:
     networks:
       - data-network
     restart: "no"
+
+  vanna:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.vanna
+    environment:
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PORT=${CLICKHOUSE_PORT:-8123}
+      # Readonly user: agent can only run SELECT queries
+      - CLICKHOUSE_USER=bi_readonly
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_READONLY_PASSWORD}
+      - LIGHTDASH_PUBLIC_URL=${LIGHTDASH_PUBLIC_URL:-http://localhost:8080}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - VANNA_MODEL=${VANNA_MODEL:-deepseek-chat}
+      - CHROMADB_PATH=/data/vanna-chromadb
+    volumes:
+      - ~/data:/data
+    ports:
+      - "8084:8084"
+    networks:
+      - data-network
+    restart: unless-stopped
 
 volumes:
   postgres_data:
