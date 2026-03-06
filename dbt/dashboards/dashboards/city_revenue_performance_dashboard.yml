@@ -6,7 +6,7 @@ tiles:
   y: 8
   w: 36
   h: 5
-  tabUuid: null
+  tabUuid: 53538bce-d608-490c-94bd-52ab64161272
   type: saved_chart
   properties:
     title: ''
@@ -18,7 +18,7 @@ tiles:
   y: 3
   w: 18
   h: 5
-  tabUuid: null
+  tabUuid: 53538bce-d608-490c-94bd-52ab64161272
   type: saved_chart
   properties:
     title: ''
@@ -30,7 +30,7 @@ tiles:
   y: 3
   w: 18
   h: 5
-  tabUuid: null
+  tabUuid: 53538bce-d608-490c-94bd-52ab64161272
   type: saved_chart
   properties:
     title: ''
@@ -42,7 +42,7 @@ tiles:
   y: 0
   w: 36
   h: 3
-  tabUuid: null
+  tabUuid: 53538bce-d608-490c-94bd-52ab64161272
   type: saved_chart
   properties:
     title: ''
@@ -50,11 +50,55 @@ tiles:
     chartSlug: total_revenue
     chartName: Total Revenue
   tileSlug: total_revenue
+- x: 0
+  y: 0
+  w: 36
+  h: 12
+  tabUuid: 7d111ec4-894a-42fe-b483-e19b1dd2533d
+  type: markdown
+  properties:
+    title: How to use this dashboard
+    hideTitle: false
+    content: '## Overview
+
+      This dashboard shows total revenue performance across cities, product categories,
+      and time periods, helping sales managers identify top-performing regions and
+      track revenue trends to optimize sales strategies.
+
+
+      ## Questions this answers
+
+      - Which city generated the highest total revenue in the selected date range?
+
+      - What product category drives the most revenue in a specific city?
+
+      - How has revenue trended over time for a particular city or category?
+
+      - Which city-category combinations are underperforming compared to others?
+
+      - What is the revenue distribution across different product categories for the
+      current quarter?
+
+
+      ## Tips
+
+      - Use the date range filter to compare performance across different time periods
+      (e.g., Q1 vs Q2, this year vs last year)
+
+      - Combine city and category filters together to drill down into specific market
+      segments and identify growth opportunities'
+    hideFrame: false
 filters:
   metrics: []
   dimensions: []
   tableCalculations: []
-tabs: []
+tabs:
+- uuid: 53538bce-d608-490c-94bd-52ab64161272
+  name: Dashboard
+  order: 0
+- uuid: 7d111ec4-894a-42fe-b483-e19b1dd2533d
+  name: README.md
+  order: 1
 slug: city_revenue_performance_dashboard
 spaceSlug: home
 version: 1
