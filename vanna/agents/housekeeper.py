@@ -71,6 +71,8 @@ def _fetch_api_fingerprints() -> list:
     fingerprints = []
     for d in dashboards:
         name = d['name']
+        if name.startswith('[WIP]'):
+            continue  # exploratory dashboards — not subject to governance
         url  = f"{public}/projects/{project_uuid}/dashboards/{d['uuid']}/view"
         try:
             tiles = requests.get(
