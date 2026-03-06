@@ -1,0 +1,42 @@
+name: Total Revenue Trend
+description: Total Revenue Trend
+tableName: daily_sales
+updatedAt: '2026-03-06T12:09:07.000Z'
+metricQuery:
+  exploreName: daily_sales
+  dimensions:
+  - daily_sales_order_date
+  metrics: &id001
+  - daily_sales_total_revenue_sum
+  filters: {}
+  sorts:
+  - fieldId: daily_sales_order_date
+    descending: false
+  limit: 500
+  metricOverrides: {}
+  dimensionOverrides: {}
+  tableCalculations: []
+  additionalMetrics: []
+  customDimensions: []
+chartConfig:
+  type: cartesian
+  config:
+    layout:
+      xField: daily_sales_order_date
+      yField: *id001
+    eChartsConfig:
+      series:
+      - type: line
+        name: daily_sales_total_revenue_sum
+        encode:
+          xRef:
+            field: daily_sales_order_date
+          yRef:
+            field: daily_sales_total_revenue_sum
+slug: total_revenue_trend
+tableConfig:
+  columnOrder:
+  - daily_sales_order_date
+  - daily_sales_total_revenue_sum
+spaceSlug: home
+version: 1

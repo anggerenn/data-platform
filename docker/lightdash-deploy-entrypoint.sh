@@ -45,12 +45,41 @@ fi
 echo "==> Logging in to Lightdash CLI..."
 lightdash login "${LIGHTDASH_URL}" --token "$LIGHTDASH_API_KEY"
 
-echo "==> Deploying dbt project to Lightdash..."
-lightdash deploy \
-  --create "Analytics" \
-  --assume-yes \
-  --non-interactive \
-  --project-dir /dbt \
-  --profiles-dir /dbt
+# Reuse existing project instead of creating a duplicate on every run
+echo "==> Checking for existing Lightdash project..."
+PROJECT_UUID=$(curl -s -H "Authorization: ApiKey ${LIGHTDASH_API_KEY}" \
+  "${LIGHTDASH_URL}/api/v1/org/projects" \
+  | python3 -c "
+import sys, json
+projects = json.load(sys.stdin).get('results', [])
+real = [p for p in projects if not p.get('type','').startswith('preview')]
+print(real[0]['projectUuid'] if real else '')
+" 2>/dev/null || echo "")
+
+if [ -n "$PROJECT_UUID" ]; then
+  echo "    Reusing existing project: $PROJECT_UUID"
+  lightdash config set-project --uuid "$PROJECT_UUID"
+  lightdash deploy \
+    --assume-yes \
+    --non-interactive \
+    --project-dir /dbt \
+    --profiles-dir /dbt
+else
+  echo "    No existing project — creating Analytics..."
+  lightdash deploy \
+    --create "Analytics" \
+    --assume-yes \
+    --non-interactive \
+    --project-dir /dbt \
+    --profiles-dir /dbt
+fi
+
+# Upload dashboard YAML files (content-as-code)
+if [ -d "/dbt/dashboards/charts" ] || [ -d "/dbt/dashboards/dashboards" ]; then
+  echo "==> Uploading dashboard YAML files..."
+  lightdash upload --force --path /dbt/dashboards --include-charts
+else
+  echo "==> No dashboard YAML files — skipping upload."
+fi
 
 echo "==> Done."

@@ -1,0 +1,42 @@
+name: Total Revenue by City
+description: Total Revenue by City
+tableName: daily_sales
+updatedAt: '2026-03-06T12:09:07.000Z'
+metricQuery:
+  exploreName: daily_sales
+  dimensions:
+  - daily_sales_city
+  metrics: &id001
+  - daily_sales_total_revenue_sum
+  filters: {}
+  sorts:
+  - fieldId: daily_sales_total_revenue_sum
+    descending: true
+  limit: 500
+  metricOverrides: {}
+  dimensionOverrides: {}
+  tableCalculations: []
+  additionalMetrics: []
+  customDimensions: []
+chartConfig:
+  type: cartesian
+  config:
+    layout:
+      xField: daily_sales_city
+      yField: *id001
+    eChartsConfig:
+      series:
+      - type: bar
+        name: daily_sales_total_revenue_sum
+        encode:
+          xRef:
+            field: daily_sales_city
+          yRef:
+            field: daily_sales_total_revenue_sum
+slug: total_revenue_by_city
+tableConfig:
+  columnOrder:
+  - daily_sales_city
+  - daily_sales_total_revenue_sum
+spaceSlug: home
+version: 1

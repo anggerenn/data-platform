@@ -17,9 +17,12 @@ from pydantic_ai.messages import (
     ToolReturnPart,
     UserPromptPart,
 )
+from agents.planner import run_dpm, PRD
+from agents.builder import run_data_modeler
+from agents.lightdash import create_dashboard
 
-from agents.routing import AgentDeps, agent
-from agents.data_visualizer import get_chart_spec
+from agents.router import AgentDeps, agent
+from agents.designer import get_chart_spec
 from vn import get_vanna
 
 flask_app = Flask(__name__)
@@ -37,12 +40,16 @@ threading.Thread(target=_warmup, daemon=True).start()
 
 _STATIC_DIR = os.path.join(os.path.dirname(__file__), 'static')
 _LIGHTDASH_URL = os.environ.get('LIGHTDASH_PUBLIC_URL', 'http://localhost:8080')
+_DBT_PATH = os.path.join(os.path.dirname(__file__), '..', 'dbt')
 
 MAX_HISTORY = 20  # sliding window: keep last N messages per session
 
 # Server-side session store: session_id → list[ModelMessage]
 # Resets on container restart — acceptable for short-lived chat sessions
 sessions: dict[str, list[ModelMessage]] = {}
+
+# DPM session store: dpm_session_id → {summary, history}
+dpm_sessions: dict[str, dict] = {}
 
 
 def _strip_explore_rows(messages: list[ModelMessage]) -> list[ModelMessage]:
@@ -112,7 +119,7 @@ def _get_session(session_id: str) -> list[ModelMessage]:
 @flask_app.route('/', methods=['GET'])
 def index():
     with open(os.path.join(_STATIC_DIR, 'index.html')) as f:
-        html = f.read().replace('{{LIGHTDASH_URL}}', _LIGHTDASH_URL)
+        html = f.read()
     return html, 200, {'Content-Type': 'text/html'}
 
 
@@ -158,6 +165,107 @@ def chat():
             "sql": None, "data": None, "columns": None, "row_count": None,
             "session_id": session_id,
         })
+
+
+def extract_exploration_summary(messages: list[ModelMessage]) -> str:
+    parts = []
+    for msg in messages:
+        if isinstance(msg, ModelRequest):
+            for part in msg.parts:
+                if isinstance(part, UserPromptPart):
+                    parts.append(f"User asked: {part.content}")
+                elif (
+                    isinstance(part, ToolReturnPart)
+                    and part.tool_name == 'explore_data'
+                    and isinstance(part.content, dict)
+                ):
+                    c = part.content
+                    if c.get('sql'):
+                        parts.append(f"SQL: {c['sql']}")
+                    if c.get('columns'):
+                        parts.append(f"Columns: {', '.join(c['columns'])}")
+                    if c.get('row_count') is not None:
+                        parts.append(f"Rows returned: {c['row_count']}")
+    return '\n'.join(parts) if parts else "No exploration data."
+
+
+@flask_app.route('/dashboard/start', methods=['POST'])
+def dashboard_start():
+    body = request.get_json()
+    session_id = (body.get('session_id') or '').strip()
+    if not session_id or session_id not in sessions:
+        return jsonify({"error": "valid session_id required"}), 400
+
+    summary = extract_exploration_summary(sessions[session_id])
+    dpm_session_id = str(uuid.uuid4())
+    dpm_sessions[dpm_session_id] = {"summary": summary, "history": []}
+
+    try:
+        response, new_msgs = asyncio.run(run_dpm("Start", summary, []))
+        dpm_sessions[dpm_session_id]["history"] = new_msgs
+        if response.status == 'complete' and response.prd:
+            dpm_sessions[dpm_session_id]["prd"] = response.prd.model_dump()
+        return jsonify({
+            "dpm_session_id": dpm_session_id,
+            "status": response.status,
+            "message": response.message,
+            "prd": response.prd.model_dump() if response.prd else None,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@flask_app.route('/dashboard/chat', methods=['POST'])
+def dashboard_chat():
+    body = request.get_json()
+    dpm_session_id = (body.get('dpm_session_id') or '').strip()
+    user_message = (body.get('message') or '').strip()
+    if not dpm_session_id or not user_message:
+        return jsonify({"error": "dpm_session_id and message required"}), 400
+    if dpm_session_id not in dpm_sessions:
+        return jsonify({"error": "DPM session not found"}), 404
+
+    sess = dpm_sessions[dpm_session_id]
+    try:
+        response, new_msgs = asyncio.run(
+            run_dpm(user_message, sess["summary"], sess["history"])
+        )
+        sess["history"] = sess["history"] + new_msgs
+        if response.status == 'complete' and response.prd:
+            sess["prd"] = response.prd.model_dump()
+        return jsonify({
+            "dpm_session_id": dpm_session_id,
+            "status": response.status,
+            "message": response.message,
+            "prd": response.prd.model_dump() if response.prd else None,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@flask_app.route('/dashboard/build', methods=['POST'])
+def dashboard_build():
+    body = request.get_json()
+    dpm_session_id = (body.get('dpm_session_id') or '').strip()
+    if not dpm_session_id or dpm_session_id not in dpm_sessions:
+        return jsonify({"error": "valid dpm_session_id required"}), 400
+
+    sess = dpm_sessions[dpm_session_id]
+    prd_data = sess.get('prd')
+    if not prd_data:
+        return jsonify({"error": "No completed PRD in session"}), 400
+
+    try:
+        prd = PRD(**prd_data)
+        model_result = asyncio.run(run_data_modeler(prd, _DBT_PATH))
+
+        if model_result.needs_new_model:
+            return jsonify({"needs_new_model": True, "error": "No existing model covers these metrics."})
+
+        dashboard_result = create_dashboard(prd, model_result)
+        return jsonify({**model_result.model_dump(), **dashboard_result})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @flask_app.route('/feedback', methods=['POST'])

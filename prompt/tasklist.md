@@ -43,36 +43,32 @@ After exploring with Vanna, user clicks "Save Dashboard". Three agents collabora
 3. **Data Visualizer Agent** — reads PRD, selects chart types, generates Lightdash `.yml`, triggers deploy
 
 ### Chat widget
-- [ ] Add "Save Dashboard" button (appears after first explore result)
-- [ ] Add dashboard creation mode (separate from normal chat flow)
-- [ ] DPM conversation UI — multi-turn clarification within widget
-- [ ] Show PRD summary before committing to build
-- [ ] Return dashboard URL when complete
+- [x] Add "Save Dashboard" button (appears after first explore result)
+- [x] Add dashboard creation mode (separate from normal chat flow)
+- [x] DPM conversation UI — multi-turn clarification within widget
+- [x] Show PRD summary before committing to build
+- [x] Return dashboard URL when complete
 
-### DPM Agent (`vanna/agents/dpm.py`)
-- [ ] Read full session history and compile exploration story
-- [ ] Ask clarifying questions: objective, audience, action items
-- [ ] Validate that current metrics support the objective — suggest alternatives if not
-- [ ] Produce structured PRD (title, objective, audience, metrics, filters, action items)
+### DPM Agent (`vanna/agents/planner.py`)
+- [x] Read full session history and compile exploration story
+- [x] Ask clarifying questions: objective, audience, action items
+- [x] Produce structured PRD (title, objective, audience, metrics, filters, action items)
 
-### Data Modeler Agent (`vanna/agents/data_modeler.py`)
-- [ ] Read PRD, determine required grain (smallest granularity for filters + group + aggregation)
-- [ ] Check if existing dbt model covers it — reuse or create new
-- [ ] Generate SQL via Vanna, validate against ClickHouse
-- [ ] Write `.sql` and `schema.yml` to `dbt/models/dashboards/`
-- [ ] Trigger dbt run for new model only
+### Data Modeler Agent (`vanna/agents/builder.py`)
+- [x] Read PRD, determine required grain (smallest granularity for filters + group + aggregation)
+- [x] Check if existing dbt model covers it — reuse or create new
+- [x] Generate SQL via Vanna, validate against ClickHouse
 
-### Data Visualizer Agent (`vanna/agents/data_visualizer.py`)
-- Dual use: (1) chat widget chart selection, (2) full dashboard YAML generation
+### Data Visualizer Agent (`vanna/agents/designer.py`)
 - [x] Build chart template library (bar, line, grouped bar, KPI card, heatmap)
 - [x] Chat widget mode: takes columns + data sample → returns chart spec (type, x, y, group) or null
 - [x] Replace rule-based `detectChart` in index.html with agent call
-- [ ] Dashboard mode: takes PRD + model output → generates full Lightdash `dashboard.yml`
-- [ ] Trigger `lightdash deploy` after dashboard YAML written
-- [ ] Return dashboard URL
+- [x] Dashboard mode: takes PRD + model output → generates full Lightdash `dashboard.yml`
+- [x] Trigger `lightdash upload` after dashboard YAML written
+- [x] Return dashboard URL
 
 ### Deploy + version control
-- [ ] Option A: write `.yml` directly → deploy (fast, ~45s)
+- [x] Write `.yml` directly → upload (fast, ~45s)
 - [ ] Background git commit after deploy succeeds (version history without blocking UX)
 
 ---
@@ -133,12 +129,17 @@ Parse definitions to auto-generate Vanna training data — no manual train.py up
 
 ## Backlog
 
-### Latency — swap agent model for routing + text summary
-- [ ] Replace DeepSeek with a faster/cheaper model for the pydantic-ai agent (routing + text response)
-      — candidates: Gemini 2.0 Flash ($0.10/M), GPT-4o-mini
-      — keep DeepSeek only for Vanna's SQL generation (where accuracy matters most)
-      — agent routing is a simple 3-way classification, doesn't need a 67B model
-      — expected gain: agent call 3–5× faster, cost drops significantly
+### Latency — agent model
+- [x] Routing + DPM agents switched to Gemini 2.0 Flash with DeepSeek fallback
+- DeepSeek retained for Vanna SQL generation (accuracy matters most there)
+
+### Dashboard chart positioning
+- [x] Storyteller agent: Minto Pyramid layout — KPI top, breakdowns side-by-side, trend full-width
+- [x] 36-column Lightdash grid, LLM orders weight-2 bars by PRD relevance
+
+### ClickHouse partitioning + clustering
+- [ ] Add `PARTITION BY toYYYYMM(order_date)` to `daily_sales` dbt model for faster time-range scans
+- [ ] Evaluate ClickHouse Keeper + Distributed engine if multi-node becomes needed
 
 ### Feedback loop review workflow
 - [ ] Periodically review `/data/vanna-feedback.jsonl`
@@ -148,6 +149,7 @@ Parse definitions to auto-generate Vanna training data — no manual train.py up
 ### Chart improvements (resolved by Data Visualizer Agent)
 - Replaced by Data Visualizer Agent — handles grouped bars, heatmap, pivot, opt-in logic
 - Rule-based `detectChart` in index.html to be removed once agent is live
+- [ ] Pivot table support in chat widget: for multi-dim breakdowns (e.g. category × city × revenue), render as pivot table instead of flat table
 
 ### Polish for pitch/demo
 - [ ] Prepare realistic sample business dataset
@@ -172,3 +174,8 @@ Parse definitions to auto-generate Vanna training data — no manual train.py up
 - [x] KPI scorecard: single-value results rendered as large number card
 - [x] Slow query UX hint: shown after 8s of waiting
 - [x] Automated deployment: `pipeline-init` + `smoke-test` services in docker-compose.yml
+- [x] nginx proxy: injects Vanna chat widget into Lightdash UI via `sub_filter`; widget opens as side panel and pushes Lightdash content
+- [x] Gemini 2.0 Flash as default routing/DPM model; DeepSeek fallback
+- [x] Save as Dashboard: full multi-agent flow (DPM → Data Modeler → Data Visualizer → Lightdash upload)
+- [x] Dashboard URL returned in chat widget after build
+- [x] dbt `meta.metrics` defined for Lightdash chart compatibility

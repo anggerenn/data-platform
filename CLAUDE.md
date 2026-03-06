@@ -104,7 +104,7 @@ Each agent has a single responsibility.
 One clear sentence is enough — avoid paragraphs.
 
 ## Interaction Rules (STRICT — enforce every session)
-1. **Permission First:** Do NOT run any terminal commands (`docker-compose up`, `pip install`, `prefect deploy`, etc.) without showing me the command and waiting for my explicit "YES"
+1. **Terminal Commands:** Run local `docker-compose` and build commands directly without asking. For VPS-affecting or destructive operations (force push, data deletion, redeployment in production), confirm first.
 2. **Review Every File:** Before creating or modifying any file, show me the full content or a diff and explain why the change is necessary — I need time to review before committing to git
 3. **One Task at a Time:** Complete exactly ONE sub-task from `tasklist.md`, update `progress.md`, then STOP — do not start the next task until I say so
 4. **Resource Awareness:** If a task involves a new Docker container, state the estimated RAM usage before proceeding

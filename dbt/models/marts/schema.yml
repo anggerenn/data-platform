@@ -18,11 +18,36 @@ models:
         description: "City of the order"
       - name: order_count
         description: "Number of distinct orders"
+        meta:
+          metrics:
+            order_count_sum:
+              type: sum
+              label: "Order Count"
       - name: customer_count
         description: "Number of distinct customers"
+        meta:
+          metrics:
+            customer_count_sum:
+              type: sum
+              label: "Customer Count"
       - name: units_sold
         description: "Total units sold"
+        meta:
+          metrics:
+            units_sold_sum:
+              type: sum
+              label: "Units Sold"
       - name: revenue
         description: "Sum of order amounts"
+        meta:
+          metrics:
+            revenue_sum:
+              type: sum
+              label: "Revenue"
       - name: total_revenue
-        description: "Sum of amount * quantity"
+        description: "Sum of amount * quantity — use this for revenue analysis"
+        meta:
+          metrics:
+            total_revenue_sum:
+              type: sum
+              label: "Total Revenue"

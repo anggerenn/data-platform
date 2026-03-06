@@ -1,0 +1,42 @@
+name: Total Revenue by Category
+description: Total Revenue by Category
+tableName: daily_sales
+updatedAt: '2026-03-06T12:09:07.000Z'
+metricQuery:
+  exploreName: daily_sales
+  dimensions:
+  - daily_sales_category
+  metrics: &id001
+  - daily_sales_total_revenue_sum
+  filters: {}
+  sorts:
+  - fieldId: daily_sales_total_revenue_sum
+    descending: true
+  limit: 500
+  metricOverrides: {}
+  dimensionOverrides: {}
+  tableCalculations: []
+  additionalMetrics: []
+  customDimensions: []
+chartConfig:
+  type: cartesian
+  config:
+    layout:
+      xField: daily_sales_category
+      yField: *id001
+    eChartsConfig:
+      series:
+      - type: bar
+        name: daily_sales_total_revenue_sum
+        encode:
+          xRef:
+            field: daily_sales_category
+          yRef:
+            field: daily_sales_total_revenue_sum
+slug: total_revenue_by_category
+tableConfig:
+  columnOrder:
+  - daily_sales_category
+  - daily_sales_total_revenue_sum
+spaceSlug: home
+version: 1

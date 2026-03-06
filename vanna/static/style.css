@@ -7,14 +7,6 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
-/* ── Lightdash iframe ─────────────────────────────────── */
-#lightdash-frame {
-  width: 100%;
-  height: 100%;
-  border: none;
-  display: block;
-}
-
 /* ── Widget root ──────────────────────────────────────── */
 #widget {
   position: fixed;
@@ -270,10 +262,26 @@ body {
 }
 #stop-btn:hover { background: #e03e3e; }
 
-/* ── Side-panel mode ──────────────────────────────────── */
-body.side-panel #lightdash-frame {
-  width: calc(100% - 420px);
+/* ── Embedded mode (inside Lightdash widget panel) ────── */
+body.embedded {
+  background: #fff;
 }
+body.embedded #widget {
+  position: static;
+  width: 100%;
+  height: 100vh;
+}
+body.embedded #chat-panel {
+  display: flex !important;
+  width: 100%;
+  height: 100vh;
+  border-radius: 0;
+  margin-bottom: 0;
+  box-shadow: none;
+}
+body.embedded .panel-header { display: none; }
+
+/* ── Side-panel mode ──────────────────────────────────── */
 body.side-panel #widget {
   position: fixed;
   top: 0; right: 0; bottom: 0; left: auto;
@@ -310,3 +318,61 @@ body.side-panel #chat-btn { display: none; }
   box-shadow: 0 6px 20px rgba(114, 98, 255, 0.55);
 }
 #chat-btn svg { pointer-events: none; }
+
+/* ── Save bar ────────────────────────────────────────── */
+#save-bar {
+  display: none;
+  padding: 6px 12px;
+  background: #f5f3ff;
+  border-bottom: 1px solid #e0d9ff;
+  flex-shrink: 0;
+}
+#save-bar.visible { display: flex; align-items: center; }
+
+/* ── Save Dashboard button ──────────────────────────── */
+#save-dashboard-btn {
+  background: #7262ff;
+  border: none;
+  color: #fff;
+  border-radius: 5px;
+  font-size: 11px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: opacity 0.12s;
+}
+#save-dashboard-btn:hover { opacity: 0.85; }
+#save-dashboard-btn:disabled { opacity: 0.55; cursor: default; }
+
+/* ── PRD card ───────────────────────────────────────── */
+.prd-card {
+  background: #f7f5ff;
+  border: 1px solid #d0c8ff;
+  border-radius: 10px;
+  padding: 14px;
+  margin: 4px 0;
+  font-size: 12.5px;
+}
+.prd-title { font-weight: 700; font-size: 13px; color: #7262ff; margin-bottom: 10px; }
+.prd-section { margin-bottom: 8px; }
+.prd-label { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+.prd-section p, .prd-section ul { margin-top: 3px; color: #333; line-height: 1.5; }
+.prd-section ul { padding-left: 16px; }
+.build-dashboard-btn {
+  margin-top: 10px;
+  background: #7262ff;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.build-dashboard-btn:hover { opacity: 0.85; }
+.build-dashboard-btn:disabled { opacity: 0.55; cursor: default; }
+.model-info { margin-bottom: 6px; }
+.model-info code { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 11px; background: #eeeaff; padding: 1px 4px; border-radius: 3px; }
+.dashboard-link { color: #7262ff; font-size: 12px; font-weight: 600; text-decoration: none; }
+.dashboard-link:hover { text-decoration: underline; }

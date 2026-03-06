@@ -5,11 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Analytics</title>
   <script src="https://cdn.plot.ly/plotly-basic-2.35.2.min.js" charset="utf-8"></script>
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="static/style.css">
 </head>
 <body>
-
-<iframe id="lightdash-frame" src="{{LIGHTDASH_URL}}" allowfullscreen></iframe>
 
 <div id="widget">
   <div id="chat-panel">
@@ -24,6 +22,9 @@
         </button>
         <button id="close-btn" onclick="togglePanel()" title="Close">&#x2715;</button>
       </div>
+    </div>
+    <div id="save-bar">
+      <button id="save-dashboard-btn" onclick="startDashboard(this)" title="Save as Dashboard">Save as Dashboard</button>
     </div>
     <div id="messages"></div>
     <div class="input-area">
@@ -42,7 +43,18 @@
   </button>
 </div>
 
-<script src="/static/app.js"></script>
+<script src="static/app.js"></script>
+<script>
+  // Embedded mode: when loaded inside the Lightdash widget panel (?embedded=1)
+  // auto-open the chat and hide the toggle button + expand button.
+  if (new URLSearchParams(window.location.search).get('embedded') === '1') {
+    document.getElementById('chat-panel').classList.add('open');
+    document.getElementById('chat-btn').style.display = 'none';
+    document.getElementById('expand-btn').style.display = 'none';
+    document.getElementById('close-btn').style.display = 'none';
+    document.body.classList.add('embedded');
+  }
+</script>
 
 </body>
 </html>

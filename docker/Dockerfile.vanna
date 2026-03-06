@@ -7,7 +7,9 @@ RUN pip install --no-cache-dir \
     "pydantic-ai[openai]" \
     clickhouse-connect \
     python-dotenv \
-    flask
+    flask \
+    docker \
+    pyyaml
 
 COPY vanna/ .
 

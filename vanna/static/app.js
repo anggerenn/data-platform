@@ -5,6 +5,8 @@ let isSidePanel = false;
 let exchangeCount = 0;
 const MAX_EXCHANGES = 20;
 let currentAbort = null;
+let isDashboardMode = false;
+let dpmSessionId = null;
 
 // ── Panel controls ────────────────────────────────────
 
@@ -175,7 +177,7 @@ function renderChart(columns, data, chartSpec) {
     const kpiEl = document.createElement('div');
     kpiEl.className = 'chart-wrap';
     kpiEl.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;padding:18px 12px;';
-    kpiEl.innerHTML = `<div style="font-size:11px;color:#888;margin-bottom:4px">${spec.title || spec.y || columns[0]}</div><div style="font-size:32px;font-weight:700;color:#7262ff">${formatted}</div>`;
+    kpiEl.innerHTML = `<div style="font-size:11px;color:#888;margin-bottom:4px">${spec.title || spec.y || columns[0]}</div><div style="font-size:22px;font-weight:700;color:#7262ff">${formatted}</div>`;
     return kpiEl;
   }
 
@@ -351,6 +353,10 @@ function renderResult(result) {
         } else if (typeof val === 'number') {
           td.textContent = Number.isInteger(val) ? val.toLocaleString()
             : val.toLocaleString(undefined, { maximumFractionDigits: 2 });
+        } else if (typeof val === 'string' && /^\w{3}, \d{2} \w{3} \d{4} 00:00:00 GMT$/.test(val)) {
+          // Date-only string like "Sun, 01 Feb 2026 00:00:00 GMT" → "2026-02-01"
+          const d = new Date(val);
+          td.textContent = d.toISOString().slice(0, 10);
         } else {
           td.textContent = val;
         }
@@ -408,13 +414,118 @@ function renderResult(result) {
   return wrap;
 }
 
+// ── Dashboard builder ─────────────────────────────────
+
+async function startDashboard(btn) {
+  btn.disabled = true;
+  btn.textContent = 'Starting…';
+  try {
+    const resp = await fetch('dashboard/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId }),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    dpmSessionId = data.dpm_session_id;
+    isDashboardMode = true;
+    document.getElementById('user-input').placeholder = 'Answer to build your dashboard PRD…';
+    btn.style.display = 'none';
+    appendDPMMessage(data.message);
+    if (data.status === 'complete' && data.prd) { showPRD(data.prd); exitDashboardMode(); }
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = 'Save as Dashboard';
+    appendMessage('assistant', 'Could not start dashboard builder. Please try again.');
+  }
+}
+
+async function sendDashboardMessage(message) {
+  const resp = await fetch('dashboard/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dpm_session_id: dpmSessionId, message }),
+  });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  const data = await resp.json();
+  appendDPMMessage(data.message);
+  if (data.status === 'complete' && data.prd) { showPRD(data.prd); exitDashboardMode(); }
+}
+
+function appendDPMMessage(text) {
+  const bubble = document.createElement('div');
+  bubble.className = 'msg assistant';
+  bubble.innerHTML = `<div style="font-size:10px;color:#7262ff;font-weight:600;margin-bottom:4px">&#10022; Dashboard Builder</div>${md(text)}`;
+  document.getElementById('messages').appendChild(bubble);
+  scrollToBottom();
+}
+
+function showPRD(prd) {
+  const capturedSessionId = dpmSessionId;  // capture before exitDashboardMode() nulls it
+  const card = document.createElement('div');
+  card.className = 'prd-card';
+  card.innerHTML =
+    `<div class="prd-title">Dashboard PRD: ${prd.title}</div>` +
+    `<div class="prd-section"><span class="prd-label">Problem Statement</span><p>${prd.problem_statement}</p></div>` +
+    `<div class="prd-section"><span class="prd-label">Objective</span><p>${prd.objective}</p></div>` +
+    `<div class="prd-section"><span class="prd-label">Audience</span><p>${prd.audience}</p></div>` +
+    `<div class="prd-section"><span class="prd-label">Key Metrics</span><ul>${prd.metrics.map(m => `<li>${m}</li>`).join('')}</ul></div>` +
+    `<div class="prd-section"><span class="prd-label">Actions</span><ul>${prd.action_items.map(a => `<li>${a}</li>`).join('')}</ul></div>` +
+    `<button class="build-dashboard-btn">Build Dashboard</button>`;
+  const buildBtn = card.querySelector('.build-dashboard-btn');
+  buildBtn.onclick = () => buildDashboard(buildBtn, capturedSessionId);
+  document.getElementById('messages').appendChild(card);
+  scrollToBottom();
+}
+
+async function buildDashboard(btn, sessionId) {
+  btn.disabled = true;
+  btn.textContent = 'Finding model…';
+  try {
+    const resp = await fetch('dashboard/build', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dpm_session_id: sessionId }),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+
+    if (data.error) {
+      btn.textContent = `Error: ${data.error}`;
+      return;
+    }
+    if (data.needs_new_model) {
+      btn.textContent = 'New dbt model needed (coming soon)';
+      return;
+    }
+
+    const infoEl = btn.parentElement.querySelector('.model-info') || document.createElement('div');
+    infoEl.className = 'model-info';
+    infoEl.innerHTML =
+      `<span class="prd-label">Model</span><p><code>${data.db_schema}.${data.model_name}</code></p>` +
+      (data.url ? `<p style="margin-top:4px"><a href="${data.url}" target="_blank" class="dashboard-link">Open Dashboard &rarr;</a></p>` : '');
+    btn.insertAdjacentElement('beforebegin', infoEl);
+    btn.style.display = 'none';
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = 'Build Dashboard';
+    appendMessage('assistant', 'Build failed. Please try again.');
+  }
+}
+
+function exitDashboardMode() {
+  isDashboardMode = false;
+  dpmSessionId = null;
+  document.getElementById('user-input').placeholder = 'Ask a question…';
+}
+
 // ── Feedback ──────────────────────────────────────────
 
 async function sendFeedback(question, sql, rating, wrap) {
   const btns = wrap.querySelectorAll('.feedback-btn');
   btns.forEach(b => b.disabled = true);
   try {
-    await fetch('/feedback', {
+    await fetch('feedback', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ question, sql, rating }),
@@ -462,6 +573,27 @@ async function sendMessage() {
   const question = input.value.trim();
   if (!question || exchangeCount >= MAX_EXCHANGES) return;
 
+  if (isDashboardMode) {
+    input.value = '';
+    appendMessage('user', question);
+    input.disabled = true;
+    sendBtn.disabled = true;
+    document.getElementById('send-btn').style.display = 'none';
+    document.getElementById('stop-btn').style.display = 'block';
+    try {
+      await sendDashboardMessage(question);
+    } catch (e) {
+      appendMessage('assistant', 'Dashboard builder error. Please try again.');
+    } finally {
+      document.getElementById('stop-btn').style.display = 'none';
+      document.getElementById('send-btn').style.display = '';
+      input.disabled = false;
+      sendBtn.disabled = false;
+      input.focus();
+    }
+    return;
+  }
+
   input.value = '';
   input.disabled = true;
   sendBtn.disabled = true;
@@ -484,7 +616,7 @@ async function sendMessage() {
   let atLimit = false;
 
   try {
-    const resp = await fetch('/chat', {
+    const resp = await fetch('chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: question, session_id: sessionId }),
@@ -500,6 +632,15 @@ async function sendMessage() {
     requestAnimationFrame(() => {
       bubble.querySelectorAll('.chart-wrap').forEach(el => Plotly.Plots.resize(el));
     });
+
+    // Show/hide Save Dashboard button (fixed position, top-right of panel)
+    const saveBar = document.getElementById('save-bar');
+    const saveDashBtn = document.getElementById('save-dashboard-btn');
+    if (!isDashboardMode && result.intent === 'explore' && result.data && result.data.length > 0) {
+      saveBar.classList.add('visible');
+      saveDashBtn.disabled = false;
+      saveDashBtn.textContent = 'Save as Dashboard';
+    }
 
     exchangeCount++;
 
