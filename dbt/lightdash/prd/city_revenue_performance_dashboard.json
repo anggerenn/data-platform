@@ -1,0 +1,24 @@
+{
+  "title": "City Revenue Performance Dashboard",
+  "objective": "Track total revenue performance broken down by city, product category, and over time to identify top-performing regions and trends",
+  "audience": "Sales managers and regional heads",
+  "metrics": [
+    "total revenue",
+    "revenue by city",
+    "revenue by category",
+    "revenue trend over time"
+  ],
+  "filters": [
+    "date range",
+    "city",
+    "category"
+  ],
+  "action_items": [
+    "Identify cities driving the most revenue",
+    "Compare category performance across regions",
+    "Spot revenue trends and seasonality"
+  ],
+  "built_at": "2026-03-06T00:00:00Z",
+  "dashboard_url": "http://localhost:8080/projects/77f5a63a-8106-48be-a9af-fe41ff976084/dashboards/8baa09fa-f9a0-427c-b448-fae73f3831e3/view",
+  "model": "daily_sales"
+}
