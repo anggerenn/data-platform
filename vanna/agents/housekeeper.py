@@ -1,8 +1,8 @@
 """Housekeeper — prevents duplicate dashboards by comparing metric fingerprints.
 
 Flow:
-  1. Function reads dbt/dashboards/charts/*.yml → extracts metric field IDs per chart
-  2. Function reads dbt/dashboards/dashboards/*.yml → maps dashboard → metric keyword set
+  1. Function reads dbt/lightdash/charts/*.yml → extracts metric field IDs per chart
+  2. Function reads dbt/lightdash/dashboards/*.yml → maps dashboard → metric keyword set
   3. Function normalises metric field IDs and PRD metric text into keyword sets
   4. Function computes Jaccard similarity between new PRD and each existing dashboard
   5. Verdict:
@@ -135,8 +135,8 @@ def _build_fingerprints(dbt_path: str) -> list:
     api_names = {fp['name'] for fp in api_fps}
 
     # Fallback: read YAML files for anything not yet in Lightdash
-    charts_dir     = os.path.join(dbt_path, 'dashboards', 'charts')
-    dashboards_dir = os.path.join(dbt_path, 'dashboards', 'dashboards')
+    charts_dir     = os.path.join(dbt_path, 'lightdash', 'charts')
+    dashboards_dir = os.path.join(dbt_path, 'lightdash', 'dashboards')
 
     chart_kws: dict = {}
     if os.path.exists(charts_dir):

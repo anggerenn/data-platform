@@ -75,9 +75,9 @@ else
 fi
 
 # Upload dashboard YAML files (content-as-code)
-if [ -d "/dbt/dashboards/charts" ] || [ -d "/dbt/dashboards/dashboards" ]; then
+if [ -d "/dbt/lightdash/charts" ] || [ -d "/dbt/lightdash/dashboards" ]; then
   echo "==> Uploading dashboard YAML files..."
-  lightdash upload --force --path /dbt/dashboards --include-charts
+  lightdash upload --force --path /dbt/lightdash --include-charts
 else
   echo "==> No dashboard YAML files — skipping upload."
 fi

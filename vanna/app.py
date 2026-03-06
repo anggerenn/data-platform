@@ -287,6 +287,23 @@ def dashboard_build():
 
         dashboard_result = create_dashboard(prd, model_result, guide=guide)
 
+        # Persist PRD to dbt/lightdash/prd/<slug>.json for audit + future reuse
+        if not dashboard_result.get('error'):
+            try:
+                import re as _re
+                slug = _re.sub(r'[^a-z0-9]+', '_', prd.title.lower()).strip('_')
+                prd_path = os.path.join(_DBT_PATH, 'lightdash', 'prd', f'{slug}.json')
+                os.makedirs(os.path.dirname(prd_path), exist_ok=True)
+                with open(prd_path, 'w') as f:
+                    json.dump({
+                        **prd.model_dump(),
+                        'built_at': __import__('datetime').datetime.utcnow().isoformat() + 'Z',
+                        'dashboard_url': dashboard_result.get('url', ''),
+                        'model': model_result.model_name,
+                    }, f, indent=2)
+            except Exception:
+                pass
+
         return jsonify({**model_result.model_dump(), **dashboard_result, **housekeeper_info, 'guide': guide_info})
     except Exception as e:
         return jsonify({"error": str(e)}), 500

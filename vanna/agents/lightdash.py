@@ -253,13 +253,13 @@ def _generate_content_files(prd, model_name: str, chart_specs: list[dict], posit
         'spaceSlug': 'home',
         'version': 1,
     }
-    files.append((f'dashboards/{dashboard_slug}.yml', _dump(dashboard_doc)))
+    files.append((f'dashboards/{dashboard_slug}.yml', _dump(dashboard_doc)))  # written under lightdash/dashboards/
 
     return files
 
 
 def _write_content_files(dbt_path: str, files: list[tuple[str, str]]) -> list[str]:
-    base_dir = os.path.join(dbt_path, 'dashboards')
+    base_dir = os.path.join(dbt_path, 'lightdash')
     paths = []
     for filename, content in files:
         path = os.path.join(base_dir, filename)
@@ -379,7 +379,7 @@ def _find_dashboard_url(title: str) -> Optional[str]:
 
 def create_dashboard(prd, model_result, guide=None) -> dict:
     """
-    Generate Lightdash dashboard YAML, write it to dbt/dashboards/,
+    Generate Lightdash dashboard YAML, write it to dbt/lightdash/,
     trigger lightdash-deploy via Docker SDK, return dashboard URL.
     """
     chart_specs = _plan_charts(model_result.model_name, model_result.columns, prd.metrics)
