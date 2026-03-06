@@ -40,28 +40,65 @@ class HousekeeperVerdict(BaseModel):
     reason: str
 
 
-# ── Lightdash API: fetch dashboard URLs ───────────────────────────────────────
+# ── Lightdash API: fetch all dashboard fingerprints ───────────────────────────
 
-def _fetch_dashboard_urls() -> dict:
+def _fetch_api_fingerprints() -> list:
+    """Pull fingerprints for ALL dashboards (UI + YAML) from the Lightdash API.
+
+    For each dashboard → tiles → savedChartUuid → metricQuery fields.
+    This covers dashboards created directly in the Lightdash UI that never
+    touch the dbt YAML files.
+    """
     internal = os.environ.get('LIGHTDASH_INTERNAL_URL', 'http://lightdash:8080')
-    public = os.environ.get('LIGHTDASH_PUBLIC_URL', 'http://localhost:8080')
-    headers = {'Authorization': f"ApiKey {os.environ.get('LIGHTDASH_API_KEY', '')}"}
+    public   = os.environ.get('LIGHTDASH_PUBLIC_URL',   'http://localhost:8080')
+    headers  = {'Authorization': f"ApiKey {os.environ.get('LIGHTDASH_API_KEY', '')}"}
+
     try:
-        r = requests.get(f"{internal}/api/v1/org/projects", headers=headers, timeout=8)
-        projects = r.json().get('results', [])
-        if not projects:
-            return {}
-        project_uuid = projects[0]['projectUuid']
-        r = requests.get(
+        project_uuid = requests.get(
+            f"{internal}/api/v1/org/projects", headers=headers, timeout=8
+        ).json()['results'][0]['projectUuid']
+    except Exception:
+        return []
+
+    try:
+        dashboards = requests.get(
             f"{internal}/api/v1/projects/{project_uuid}/dashboards",
             headers=headers, timeout=8,
-        )
-        return {
-            d['name']: f"{public}/projects/{project_uuid}/dashboards/{d['uuid']}/view"
-            for d in r.json().get('results', [])
-        }
+        ).json().get('results', [])
     except Exception:
-        return {}
+        return []
+
+    fingerprints = []
+    for d in dashboards:
+        name = d['name']
+        url  = f"{public}/projects/{project_uuid}/dashboards/{d['uuid']}/view"
+        try:
+            tiles = requests.get(
+                f"{internal}/api/v1/dashboards/{d['uuid']}",
+                headers=headers, timeout=8,
+            ).json()['results']['tiles']
+        except Exception:
+            tiles = []
+
+        all_kws: set = set()
+        for tile in tiles:
+            chart_uuid = tile.get('properties', {}).get('savedChartUuid')
+            if not chart_uuid:
+                continue
+            try:
+                mq = requests.get(
+                    f"{internal}/api/v1/saved/{chart_uuid}",
+                    headers=headers, timeout=8,
+                ).json()['results']['metricQuery']
+                fields = mq.get('metrics', []) + mq.get('dimensions', [])
+                for fid in fields:
+                    all_kws |= _keywords(_normalise_field(fid))
+            except Exception:
+                continue
+
+        fingerprints.append({'name': name, 'url': url, 'keywords': all_kws})
+
+    return fingerprints
 
 
 # ── Function: build metric fingerprints from YAML ─────────────────────────────
@@ -87,10 +124,20 @@ def _keywords(text: str) -> set:
 
 
 def _build_fingerprints(dbt_path: str) -> list:
-    charts_dir = os.path.join(dbt_path, 'dashboards', 'charts')
+    """Merge API fingerprints (all dashboards) with YAML fingerprints (undeployed).
+
+    API is the authoritative source — covers both UI-created and YAML-created
+    dashboards. YAML-only dashboards (written but not yet deployed) are added
+    as a fallback so the housekeeper still catches them pre-deploy.
+    """
+    # Primary: pull everything from Lightdash API
+    api_fps = _fetch_api_fingerprints()
+    api_names = {fp['name'] for fp in api_fps}
+
+    # Fallback: read YAML files for anything not yet in Lightdash
+    charts_dir     = os.path.join(dbt_path, 'dashboards', 'charts')
     dashboards_dir = os.path.join(dbt_path, 'dashboards', 'dashboards')
 
-    # slug → keyword set from metrics + dimensions
     chart_kws: dict = {}
     if os.path.exists(charts_dir):
         for fn in os.listdir(charts_dir):
@@ -99,16 +146,14 @@ def _build_fingerprints(dbt_path: str) -> list:
             with open(os.path.join(charts_dir, fn)) as f:
                 doc = yaml.safe_load(f) or {}
             slug = doc.get('slug', fn[:-4])
-            mq = doc.get('metricQuery', {})
+            mq   = doc.get('metricQuery', {})
             fields = mq.get('metrics', []) + mq.get('dimensions', [])
             kws: set = set()
             for fid in fields:
                 kws |= _keywords(_normalise_field(fid))
             chart_kws[slug] = kws
 
-    url_map = _fetch_dashboard_urls()
-    fingerprints = []
-
+    yaml_fps = []
     if os.path.exists(dashboards_dir):
         for fn in os.listdir(dashboards_dir):
             if not fn.endswith('.yml'):
@@ -116,17 +161,15 @@ def _build_fingerprints(dbt_path: str) -> list:
             with open(os.path.join(dashboards_dir, fn)) as f:
                 doc = yaml.safe_load(f) or {}
             name = doc.get('name', fn[:-4])
+            if name in api_names:
+                continue  # already covered by API
             all_kws: set = set()
             for tile in doc.get('tiles', []):
                 slug = tile.get('properties', {}).get('chartSlug', '')
                 all_kws |= chart_kws.get(slug, set())
-            fingerprints.append({
-                'name': name,
-                'url': url_map.get(name, ''),
-                'keywords': all_kws,
-            })
+            yaml_fps.append({'name': name, 'url': '', 'keywords': all_kws})
 
-    return fingerprints
+    return api_fps + yaml_fps
 
 
 def _jaccard(a: set, b: set) -> float:
