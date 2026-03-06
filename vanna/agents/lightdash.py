@@ -145,7 +145,7 @@ def _chart_config(spec: dict) -> dict:
     }
 
 
-def _generate_content_files(prd, model_name: str, chart_specs: list[dict], positioned: list[dict]) -> list[tuple[str, str]]:
+def _generate_content_files(prd, model_name: str, chart_specs: list[dict], positioned: list[dict], guide=None) -> list[tuple[str, str]]:
     """Return [(filename, yaml_content)] for individual chart files + one dashboard file.
 
     Format matches what `lightdash upload` expects: one YAML file per object,
@@ -207,6 +207,31 @@ def _generate_content_files(prd, model_name: str, chart_specs: list[dict], posit
         for spec in chart_specs
         if spec['name'] in pos_map
     ]
+    # Markdown guide tile — pinned at the bottom of the dashboard
+    if guide:
+        bottom_y = max((t['y'] + t['h'] for t in tiles), default=0)
+        use_cases_md = '\n'.join(f'- {u}' for u in (guide.use_cases or []))
+        tips_md = '\n'.join(f'- {t}' for t in (guide.tips or []))
+        content = f"## Overview\n{guide.overview}"
+        if use_cases_md:
+            content += f"\n\n## Questions this answers\n{use_cases_md}"
+        if tips_md:
+            content += f"\n\n## Tips\n{tips_md}"
+        tiles.append({
+            'x': 0,
+            'y': bottom_y,
+            'w': 36,
+            'h': 4,
+            'tabUuid': None,
+            'type': 'markdown',
+            'properties': {
+                'title': 'How to use this dashboard',
+                'hideTitle': False,
+                'content': content,
+                'hideFrame': False,
+            },
+        })
+
     dashboard_slug = _slugify(prd.title)
     dashboard_doc = {
         'name': prd.title,
@@ -343,7 +368,7 @@ def _find_dashboard_url(title: str) -> Optional[str]:
 
 # ── Public entry point ─────────────────────────────────────────────────────────
 
-def create_dashboard(prd, model_result) -> dict:
+def create_dashboard(prd, model_result, guide=None) -> dict:
     """
     Generate Lightdash dashboard YAML, write it to dbt/dashboards/,
     trigger lightdash-deploy via Docker SDK, return dashboard URL.
@@ -353,7 +378,7 @@ def create_dashboard(prd, model_result) -> dict:
         return {"error": "Could not plan any charts from PRD metrics and model columns"}
 
     positioned = arrange_tiles(prd, chart_specs)
-    content_files = _generate_content_files(prd, model_result.model_name, chart_specs, positioned)
+    content_files = _generate_content_files(prd, model_result.model_name, chart_specs, positioned, guide=guide)
     written_paths = _write_content_files('/dbt', content_files)
     yaml_path = written_paths[-1]  # dashboard file is last
 

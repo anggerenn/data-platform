@@ -21,6 +21,7 @@ from agents.planner import run_dpm, PRD
 from agents.builder import run_data_modeler
 from agents.lightdash import create_dashboard
 from agents.housekeeper import check as housekeeper_check
+from agents.instructor import generate_guide
 
 from agents.router import AgentDeps, agent
 from agents.designer import get_chart_spec
@@ -259,39 +260,34 @@ def dashboard_build():
     try:
         prd = PRD(**prd_data)
 
-        # Dashboard police: check for existing dashboards with same/overlapping narrative
+        # Housekeeper: advisory only — never blocks, user is the decision maker
         verdict = housekeeper_check(prd)
-        if verdict.verdict == 'full':
-            return jsonify({
-                'police': 'full',
-                'url': verdict.matched_dashboard_url,
-                'message': f"A dashboard already covers this: **{verdict.matched_dashboard_name}**. {verdict.reason}",
-            })
-        if verdict.verdict == 'partial_covered':
-            # PRD metrics already covered — redirect like full, but softer message
-            return jsonify({
-                'police': 'partial_covered',
-                'url': verdict.matched_dashboard_url,
-                'message': f"Your metrics are already in **{verdict.matched_dashboard_name}**. {verdict.reason}",
-            })
-        if verdict.verdict == 'partial_uncovered':
-            # PRD has new metrics — build proceeds but flag the overlap
-            overlap_info = {
-                'police': 'partial_uncovered',
-                'existing_url': verdict.matched_dashboard_url,
+        if verdict.verdict != 'none':
+            housekeeper_info = {
+                'housekeeper': verdict.verdict,
                 'existing_name': verdict.matched_dashboard_name,
-                'reason': verdict.reason,
+                'existing_url': verdict.matched_dashboard_url,
+                'suggestion': verdict.reason,
             }
         else:
-            overlap_info = {}
+            housekeeper_info = {}
 
         model_result = asyncio.run(run_data_modeler(prd, _DBT_PATH))
 
         if model_result.needs_new_model:
             return jsonify({"needs_new_model": True, "error": "No existing model covers these metrics."})
 
-        dashboard_result = create_dashboard(prd, model_result)
-        return jsonify({**model_result.model_dump(), **dashboard_result, **overlap_info})
+        # Instructor: generate guide before build so it can be embedded as a markdown tile
+        try:
+            guide = generate_guide(prd)
+            guide_info = guide.model_dump()
+        except Exception:
+            guide = None
+            guide_info = {}
+
+        dashboard_result = create_dashboard(prd, model_result, guide=guide)
+
+        return jsonify({**model_result.model_dump(), **dashboard_result, **housekeeper_info, 'guide': guide_info})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

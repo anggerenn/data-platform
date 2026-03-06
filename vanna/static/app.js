@@ -499,29 +499,38 @@ async function buildDashboard(btn, sessionId) {
       return;
     }
 
-    // Dashboard police: full match → redirect, no new dashboard created
-    if (data.police === 'full') {
-      const infoEl = document.createElement('div');
-      infoEl.className = 'model-info';
-      infoEl.innerHTML =
-        `<p style="color:#e67e00;font-weight:600;margin-bottom:4px">🚔 Dashboard already exists</p>` +
-        `<p style="margin-bottom:4px">${data.message}</p>` +
-        `<a href="${data.url}" target="_blank" class="dashboard-link">Open existing Dashboard &rarr;</a>`;
-      btn.insertAdjacentElement('beforebegin', infoEl);
-      btn.style.display = 'none';
-      return;
-    }
-
     const infoEl = btn.parentElement.querySelector('.model-info') || document.createElement('div');
     infoEl.className = 'model-info';
     let html = `<span class="prd-label">Model</span><p><code>${data.db_schema}.${data.model_name}</code></p>`;
 
-    // Dashboard police: partial match → flag overlap, still show new dashboard
-    if (data.police === 'partial') {
-      html += `<p style="color:#e67e00;margin-top:4px">⚠ Overlaps with <a href="${data.existing_url}" target="_blank" class="dashboard-link">${data.existing_name}</a> — ${data.reason}</p>`;
+    // Housekeeper: advisory suggestions (never blocks)
+    if (data.housekeeper) {
+      const icon = data.housekeeper === 'full' ? '⚠' : '💡';
+      html += `<p style="color:#e67e00;margin-top:4px">${icon} ${data.suggestion}`;
+      if (data.existing_url) {
+        html += ` <a href="${data.existing_url}" target="_blank" class="dashboard-link">View: ${data.existing_name} &rarr;</a>`;
+      }
+      html += `</p>`;
     }
 
-    html += data.url ? `<p style="margin-top:4px"><a href="${data.url}" target="_blank" class="dashboard-link">Open Dashboard &rarr;</a></p>` : '';
+    html += data.url ? `<p style="margin-top:8px"><a href="${data.url}" target="_blank" class="dashboard-link">Open Dashboard &rarr;</a></p>` : '';
+
+    // Instructor guide
+    if (data.guide && data.guide.overview) {
+      const g = data.guide;
+      const useCases = (g.use_cases || []).map(u => `<li>${u}</li>`).join('');
+      const tips = (g.tips || []).map(t => `<li>${t}</li>`).join('');
+      html += `
+        <details style="margin-top:10px">
+          <summary style="cursor:pointer;font-weight:600;color:#a78bfa">Dashboard Guide</summary>
+          <div style="margin-top:6px;font-size:12px;line-height:1.6">
+            <p>${g.overview}</p>
+            ${useCases ? `<p style="font-weight:600;margin-top:6px">Questions this answers:</p><ul style="margin:4px 0 0 16px">${useCases}</ul>` : ''}
+            ${tips ? `<p style="font-weight:600;margin-top:6px">Tips:</p><ul style="margin:4px 0 0 16px">${tips}</ul>` : ''}
+          </div>
+        </details>`;
+    }
+
     infoEl.innerHTML = html;
     btn.insertAdjacentElement('beforebegin', infoEl);
     btn.style.display = 'none';
