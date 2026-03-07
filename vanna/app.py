@@ -146,11 +146,9 @@ def chat_stream():
         async def _run():
             try:
                 deps = AgentDeps(vanna=vn, sql_cache=_sql_cache)
-                async with agent.run_stream(question, deps=deps, message_history=history) as result:
-                    async for delta in result.stream_text(delta=True):
-                        q.put(('text', delta))
-                    output = result.output
-                    new_msgs = _strip_explore_rows(result.new_messages())
+                result = await agent.run(question, deps=deps, message_history=history)
+                output = result.output
+                new_msgs = _strip_explore_rows(result.new_messages())
 
                 rows = deps.result_rows
                 columns = deps.result_columns
@@ -169,6 +167,7 @@ def chat_stream():
                 }
                 q.put(('output', result_data, new_msgs))
             except Exception as e:
+                sessions.setdefault(session_id, [])
                 q.put(('error', str(e)))
 
         threading.Thread(target=lambda: asyncio.run(_run()), daemon=True).start()

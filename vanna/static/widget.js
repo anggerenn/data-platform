@@ -77,15 +77,12 @@
     open = true;
     panel.classList.add('open');
     fab.style.display = 'none';
-    document.body.style.transition = 'margin-right 0.28s cubic-bezier(.4,0,.2,1)';
-    document.body.style.marginRight = '420px';
   }
 
   function closePanel() {
     open = false;
     panel.classList.remove('open');
     fab.style.display = '';
-    document.body.style.marginRight = '';
   }
 
   fab.addEventListener('click', openPanel);

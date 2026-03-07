@@ -18,6 +18,8 @@ Rules:
 - Use NULLIF(expr, 0) for safe division
 - GROUP BY must use column expressions, not aliases
 - Schemas: raw (source), transformed_staging (views), transformed_marts (tables)
+- For date filters use ISO string literals directly: WHERE order_date >= '2026-03-01'
+- NEVER use ClickHouse functions: toDate(), today(), toStartOfMonth(), toYYYYMM(), toMonth(), toDayOfMonth()
 - Return ONLY the SQL query — no explanation, no markdown code fences"""
 
 

@@ -137,6 +137,19 @@ ORDER BY order_date
 """)
 
 vn.train(
+    question="Show me daily revenue by city for march 2026",
+    sql="""
+SELECT
+    order_date,
+    city,
+    SUM(total_revenue) AS daily_revenue
+FROM transformed_marts.daily_sales
+WHERE order_date >= '2026-03-01' AND order_date < '2026-04-01'
+GROUP BY order_date, city
+ORDER BY order_date, city
+""")
+
+vn.train(
     question="Show me monthly revenue by city",
     sql="""
 SELECT
