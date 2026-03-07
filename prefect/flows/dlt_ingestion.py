@@ -49,19 +49,17 @@ def generate_customers():
 @task(retries=2, retry_delay_seconds=30)
 def run_dlt():
     """Run dlt ingestion pipeline"""
+    db_host = os.environ.get("ANALYTICS_DB_HOST", "analytics-db")
+    db_port = os.environ.get("ANALYTICS_DB_PORT", "5432")
+    db_user = os.environ["ANALYTICS_DB_USER"]
+    db_pass = os.environ["ANALYTICS_DB_PASSWORD"]
+    db_name = os.environ.get("ANALYTICS_DB_NAME", "analytics")
+
     pipeline = dlt.pipeline(
         pipeline_name='analytics',
         dataset_name='raw',
-        destination=dlt.destinations.clickhouse(
-            credentials={
-                "database": os.environ["CLICKHOUSE_DB"],
-                "username": os.environ["CLICKHOUSE_USER"],
-                "password": os.environ["CLICKHOUSE_PASSWORD"],
-                "host": os.environ["CLICKHOUSE_HOST"],
-                "http_port": int(os.environ.get("CLICKHOUSE_PORT", "8123")),
-                "port": int(os.environ.get("CLICKHOUSE_NATIVE_PORT", "9000")),
-                "secure": 0,
-            }
+        destination=dlt.destinations.postgres(
+            credentials=f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
         ),
         pipelines_dir=os.path.expanduser(os.environ["ANALYTICS_PIPELINES_DIR"])
     )

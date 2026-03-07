@@ -44,12 +44,11 @@ services:
     environment:
       PREFECT_API_URL: "http://prefect-server:4200/api"
       ANALYTICS_PIPELINES_DIR: "/data/pipelines"
-      CLICKHOUSE_HOST: clickhouse
-      CLICKHOUSE_PORT: ${CLICKHOUSE_PORT:-8123}
-      CLICKHOUSE_NATIVE_PORT: ${CLICKHOUSE_NATIVE_PORT:-9000}
-      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-default}
-      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      ANALYTICS_DB_HOST: analytics-db
+      ANALYTICS_DB_PORT: 5432
+      ANALYTICS_DB_NAME: ${ANALYTICS_DB_NAME:-analytics}
+      ANALYTICS_DB_USER: ${ANALYTICS_DB_USER:-analytics}
+      ANALYTICS_DB_PASSWORD: ${ANALYTICS_DB_PASSWORD}
       LIGHTDASH_INTERNAL_URL: "http://lightdash:8080"
       LIGHTDASH_API_KEY: ${LIGHTDASH_API_KEY}
       GIT_AUTHOR_NAME: "Lightdash Sync"
@@ -65,22 +64,16 @@ services:
       - data-network
     restart: unless-stopped
 
-  clickhouse:
-    image: clickhouse/clickhouse-server:24.3
+  analytics-db:
+    image: postgres:15
     environment:
-      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-default}
-      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-changeme}
-      # Readonly user password — loaded by users.d/bi_readonly.xml at startup
-      CLICKHOUSE_READONLY_PASSWORD: ${CLICKHOUSE_READONLY_PASSWORD}
-    mem_limit: 2g
+      POSTGRES_USER: ${ANALYTICS_DB_USER:-analytics}
+      POSTGRES_PASSWORD: ${ANALYTICS_DB_PASSWORD:-changeme}
+      POSTGRES_DB: ${ANALYTICS_DB_NAME:-analytics}
+      ANALYTICS_DB_READONLY_PASSWORD: ${ANALYTICS_DB_READONLY_PASSWORD:-changeme_readonly}
     volumes:
-      - ~/data/clickhouse:/var/lib/clickhouse
-      # File-level mount: injects our user without shadowing default-user.xml
-      - ./clickhouse/users.d/bi_readonly.xml:/etc/clickhouse-server/users.d/bi_readonly.xml
-    ports:
-      - "8123:8123"
-      - "9000:9000"
+      - analytics_db_data:/var/lib/postgresql/data
+      - ./docker/analytics-db-init:/docker-entrypoint-initdb.d
     networks:
       - data-network
     restart: unless-stopped
@@ -131,7 +124,7 @@ services:
     depends_on:
       lightdash-db:
         condition: service_started
-      clickhouse:
+      analytics-db:
         condition: service_started
     environment:
       - PGHOST=lightdash-db
@@ -169,17 +162,16 @@ services:
     depends_on:
       prefect-server:
         condition: service_healthy
-      clickhouse:
+      analytics-db:
         condition: service_started
     environment:
       PREFECT_API_URL: "http://prefect-server:4200/api"
       ANALYTICS_PIPELINES_DIR: "/data/pipelines"
-      CLICKHOUSE_HOST: clickhouse
-      CLICKHOUSE_PORT: ${CLICKHOUSE_PORT:-8123}
-      CLICKHOUSE_NATIVE_PORT: ${CLICKHOUSE_NATIVE_PORT:-9000}
-      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-default}
-      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      ANALYTICS_DB_HOST: analytics-db
+      ANALYTICS_DB_PORT: 5432
+      ANALYTICS_DB_NAME: ${ANALYTICS_DB_NAME:-analytics}
+      ANALYTICS_DB_USER: ${ANALYTICS_DB_USER:-analytics}
+      ANALYTICS_DB_PASSWORD: ${ANALYTICS_DB_PASSWORD}
     volumes:
       - ~/data:/data
       - ./dbt:/opt/prefect/dbt:ro
@@ -203,11 +195,12 @@ services:
       lightdash:
         condition: service_healthy
     environment:
-      - CLICKHOUSE_HOST=clickhouse
-      - CLICKHOUSE_PORT=${CLICKHOUSE_PORT:-8123}
+      - ANALYTICS_DB_HOST=analytics-db
+      - ANALYTICS_DB_PORT=5432
+      - ANALYTICS_DB_NAME=${ANALYTICS_DB_NAME:-analytics}
       # Readonly user: stored in Lightdash's DB and used by the web app for all queries
-      - CLICKHOUSE_USER=bi_readonly
-      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_READONLY_PASSWORD}
+      - ANALYTICS_DB_USER=bi_readonly
+      - ANALYTICS_DB_PASSWORD=${ANALYTICS_DB_READONLY_PASSWORD}
       - LIGHTDASH_URL=http://lightdash:8080
       - LIGHTDASH_EMAIL=${LIGHTDASH_EMAIL}
       - LIGHTDASH_PASSWORD=${LIGHTDASH_PASSWORD}
@@ -225,11 +218,12 @@ services:
       context: .
       dockerfile: docker/Dockerfile.vanna
     environment:
-      - CLICKHOUSE_HOST=clickhouse
-      - CLICKHOUSE_PORT=${CLICKHOUSE_PORT:-8123}
+      - ANALYTICS_DB_HOST=analytics-db
+      - ANALYTICS_DB_PORT=5432
+      - ANALYTICS_DB_NAME=${ANALYTICS_DB_NAME:-analytics}
       # Readonly user: agent can only run SELECT queries
-      - CLICKHOUSE_USER=bi_readonly
-      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_READONLY_PASSWORD}
+      - ANALYTICS_DB_USER=bi_readonly
+      - ANALYTICS_DB_PASSWORD=${ANALYTICS_DB_READONLY_PASSWORD}
       - LIGHTDASH_PUBLIC_URL=${LIGHTDASH_PUBLIC_URL:-http://localhost:8080}
       - LIGHTDASH_INTERNAL_URL=http://lightdash:8080
       - LIGHTDASH_API_KEY=${LIGHTDASH_API_KEY}
@@ -238,11 +232,10 @@ services:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - VANNA_MODEL=${VANNA_MODEL:-deepseek-chat}
-      - CHROMADB_PATH=/data/vanna-chromadb
+      - BM25_PATH=/data/vanna-bm25
     volumes:
       - ~/data:/data
       - ./dbt:/dbt
-      - chroma_cache:/root/.cache/chroma
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "8084:8084"
@@ -287,7 +280,7 @@ services:
 volumes:
   postgres_data:
   lightdash_db_data:
-  chroma_cache:
+  analytics_db_data:
 
 networks:
   data-network:

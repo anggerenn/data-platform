@@ -2,13 +2,10 @@ default:
   target: dev
   outputs:
     dev:
-      type: clickhouse
+      type: postgres
+      host: "{{ env_var('ANALYTICS_DB_HOST') }}"
+      port: 5432
+      user: "{{ env_var('ANALYTICS_DB_USER') }}"
+      password: "{{ env_var('ANALYTICS_DB_PASSWORD') }}"
+      dbname: "{{ env_var('ANALYTICS_DB_NAME', 'analytics') }}"
       schema: transformed
-      host: "{{ env_var('CLICKHOUSE_HOST') }}"
-      port: "{{ env_var('CLICKHOUSE_PORT') | int }}"
-      user: "{{ env_var('CLICKHOUSE_USER') }}"
-      password: "{{ env_var('CLICKHOUSE_PASSWORD') }}"
-      secure: false
-      verify: false
-      connect_timeout: 10
-      send_receive_timeout: 300

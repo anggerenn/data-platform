@@ -32,8 +32,7 @@ from vn import get_vanna
 flask_app = Flask(__name__)
 vn = get_vanna()
 
-# Warm up ChromaDB embedding model in background so the first user query is fast.
-# get_similar_question_sql() triggers ONNX model load without calling any external API.
+# Warm up BM25 index in background so the first user query is fast.
 import threading
 def _warmup():
     try:
@@ -174,7 +173,8 @@ def chat_stream():
 
         threading.Thread(target=lambda: asyncio.run(_run()), daemon=True).start()
 
-        yield f"data: {json.dumps({'type': 'status', 'message': 'Thinking\u2026'})}\n\n"
+        thinking_event = json.dumps({'type': 'status', 'message': 'Thinking\u2026'})
+        yield f"data: {thinking_event}\n\n"
 
         while True:
             item = q.get()

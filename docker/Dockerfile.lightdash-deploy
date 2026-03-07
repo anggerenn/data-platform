@@ -8,8 +8,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Install dbt-clickhouse
-RUN pip install --no-cache-dir dbt-clickhouse
+# Install dbt-postgres
+RUN pip install --no-cache-dir dbt-postgres
 
 # Install Lightdash CLI (pinned to match server image)
 RUN npm install -g @lightdash/cli@0.2473.1

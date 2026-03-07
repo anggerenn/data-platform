@@ -1,20 +1,23 @@
 import os
 
-import clickhouse_connect
 import pandas as pd
+import psycopg2
 from openai import OpenAI as OpenAIClient
 
 from vec import BM25Store
 
-_SYSTEM_PROMPT = """You are a ClickHouse SQL expert. Given context about the database schema, \
-documentation, and similar examples, generate a valid ClickHouse SQL query for the user's question.
+_SYSTEM_PROMPT = """You are a PostgreSQL SQL expert. Given context about the database schema, \
+documentation, and similar examples, generate a valid PostgreSQL query for the user's question.
 
 Rules:
-- Use lagInFrame() / leadInFrame() instead of LAG() / LEAD() — ClickHouse 24.3 does not support standard window functions
-- lagInFrame requires a frame spec: OVER (ORDER BY col ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
-- Window functions cannot be mixed with GROUP BY in the same SELECT — use a subquery
-- Use nullIf(prev, 0) for safe division in growth calculations
+- Use standard window functions: LAG(), LEAD(), etc. — PostgreSQL supports them natively
+- Use DATE_TRUNC('month', col) instead of any toStartOfMonth() equivalent
+- Use EXTRACT(day FROM col) for day-of-month, EXTRACT(year FROM col) for year
+- Use CURRENT_DATE for today's date
+- Use INTERVAL '1 month' syntax (with quotes) for date arithmetic
+- Use NULLIF(expr, 0) for safe division
 - GROUP BY must use column expressions, not aliases
+- Schemas: raw (source), transformed_staging (views), transformed_marts (tables)
 - Return ONLY the SQL query — no explanation, no markdown code fences"""
 
 
@@ -23,17 +26,17 @@ class VannaLite:
         self._client = client
         self._model = model
         self._store = store
-        self._ch = None
+        self._conn = None
+        self._conn_kwargs = {}
 
-    def connect_to_clickhouse(self, host, port, user, password, dbname, settings=None):
-        self._ch = clickhouse_connect.get_client(
-            host=host,
-            port=port,
-            username=user,
-            password=password,
-            database=dbname,
-            settings=settings or {},
-        )
+    def connect_to_postgres(self, host, port, user, password, dbname):
+        self._conn_kwargs = dict(host=host, port=port, user=user, password=password, dbname=dbname)
+        self._conn = None
+
+    def _get_conn(self):
+        if self._conn is None or self._conn.closed:
+            self._conn = psycopg2.connect(**self._conn_kwargs)
+        return self._conn
 
     def train(self, ddl=None, documentation=None, question=None, sql=None):
         if ddl:
@@ -69,8 +72,11 @@ class VannaLite:
         return resp.choices[0].message.content.strip()
 
     def run_sql(self, sql: str) -> pd.DataFrame:
-        result = self._ch.query(sql)
-        return pd.DataFrame(result.result_rows, columns=result.column_names)
+        with self._get_conn().cursor() as cur:
+            cur.execute(sql)
+            columns = [desc[0] for desc in cur.description]
+            rows = cur.fetchall()
+        return pd.DataFrame(rows, columns=columns)
 
     def get_related_documentation(self, query: str) -> list:
         return self._store.get_related_documentation(query)
@@ -92,12 +98,11 @@ def get_vanna() -> VannaLite:
         model=os.environ.get('VANNA_MODEL', 'deepseek-chat'),
         store=store,
     )
-    vn.connect_to_clickhouse(
-        host=os.environ.get('CLICKHOUSE_HOST', 'localhost'),
-        port=int(os.environ.get('CLICKHOUSE_PORT', '8123')),
-        user=os.environ.get('CLICKHOUSE_USER', 'default'),
-        password=os.environ['CLICKHOUSE_PASSWORD'],
-        dbname='transformed_marts',
-        settings={'readonly': '1'},
+    vn.connect_to_postgres(
+        host=os.environ.get('ANALYTICS_DB_HOST', 'localhost'),
+        port=int(os.environ.get('ANALYTICS_DB_PORT', '5432')),
+        user=os.environ.get('ANALYTICS_DB_USER', 'bi_readonly'),
+        password=os.environ['ANALYTICS_DB_PASSWORD'],
+        dbname=os.environ.get('ANALYTICS_DB_NAME', 'analytics'),
     )
     return vn

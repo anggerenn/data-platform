@@ -1,4 +1,4 @@
-dlt[clickhouse]
+dlt[postgres]
 python-dotenv
-dbt-clickhouse
+dbt-postgres
 docker

@@ -4,7 +4,7 @@ WORKDIR /app
 
 RUN pip install --no-cache-dir \
     "pydantic-ai[openai]" \
-    clickhouse-connect \
+    psycopg2-binary \
     rank-bm25 \
     pandas \
     python-dotenv \
