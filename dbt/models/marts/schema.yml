@@ -22,6 +22,8 @@ models:
         description: "Product category"
         tests:
           - not_null
+          - accepted_values:
+              values: ['Electronics', 'Clothing', 'Food', 'Books']
         meta:
           dimension:
             type: string

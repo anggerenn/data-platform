@@ -6,6 +6,9 @@ models:
     columns:
       - name: order_id
         description: "Unique order identifier"
+        tests:
+          - not_null
+          - unique
       - name: customer_id
         description: "Unique customer identifier"
       - name: order_date

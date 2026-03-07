@@ -35,7 +35,7 @@ class BM25Store:
         index = BM25Okapi(tokenized)
         scores = index.get_scores(query.lower().split())
         ranked = sorted(zip(scores, corpus), reverse=True)
-        return [doc for score, doc in ranked[:top_k] if score > 0]
+        return [doc for score, doc in ranked[:top_k]]
 
     # --- write ---
 
@@ -68,4 +68,4 @@ class BM25Store:
         index = BM25Okapi(tokenized)
         scores = index.get_scores(query.lower().split())
         ranked = sorted(zip(scores, range(len(entries)), entries), reverse=True)
-        return [entry for score, _, entry in ranked[:top_k] if score > 0]
+        return [entry for score, _, entry in ranked[:top_k]]

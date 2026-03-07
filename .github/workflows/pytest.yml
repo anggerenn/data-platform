@@ -1,0 +1,41 @@
+name: Python Unit Tests
+
+on:
+  push:
+    paths:
+      - 'vanna/**'
+      - 'tests/**'
+  pull_request:
+    paths:
+      - 'vanna/**'
+      - 'tests/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install --no-cache-dir \
+            "pydantic-ai[openai]" \
+            clickhouse-connect \
+            rank-bm25 \
+            pandas \
+            python-dotenv \
+            flask \
+            docker \
+            pyyaml \
+            requests \
+            pytest
+
+      - name: Run unit tests
+        run: pytest tests/ -v --tb=short
