@@ -380,7 +380,18 @@ function renderResult(result) {
     const csvBtn = document.createElement('button');
     csvBtn.className = 'csv-btn';
     csvBtn.textContent = '⬇ Export CSV';
-    csvBtn.onclick = () => exportCSV(result.columns, result.data);
+    csvBtn.onclick = () => {
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = '/export';
+      form.style.display = 'none';
+      const inp = document.createElement('input');
+      inp.type = 'hidden'; inp.name = 'sql'; inp.value = result.sql;
+      form.appendChild(inp);
+      document.body.appendChild(form);
+      form.submit();
+      document.body.removeChild(form);
+    };
     wrap.appendChild(csvBtn);
   }
 
@@ -570,22 +581,6 @@ async function sendFeedback(question, sql, rating, wrap) {
   }
 }
 
-// ── CSV export ────────────────────────────────────────
-
-function exportCSV(columns, data) {
-  const escape = v => {
-    const s = (v === null || v === undefined) ? '' : String(v);
-    return s.includes(',') || s.includes('"') || s.includes('\n')
-      ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  const rows = [columns.map(escape).join(',')];
-  data.forEach(row => rows.push(columns.map(col => escape(row[col])).join(',')));
-  const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = 'export.csv'; a.click();
-  URL.revokeObjectURL(url);
-}
 
 // ── Session banner ────────────────────────────────────
 

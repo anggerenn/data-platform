@@ -23,6 +23,7 @@ class AgentDeps:
     # Populated by explore_data tool — rows bypass the LLM entirely
     result_rows: list = field(default_factory=list)
     result_columns: list = field(default_factory=list)
+    result_total_count: int = 0
 
 
 agent = Agent(
@@ -55,10 +56,11 @@ async def explore_data(ctx: RunContext[AgentDeps], question: str) -> dict:
         sql = ctx.deps.vanna.generate_sql(question)
         ctx.deps.sql_cache[cache_key] = sql
     df = ctx.deps.vanna.run_sql(sql)
-    rows = df.head(500).to_dict(orient='records')
+    rows = df.head(20).to_dict(orient='records')
     # Store rows in deps — they never enter LLM context
     ctx.deps.result_rows = rows
     ctx.deps.result_columns = list(df.columns)
+    ctx.deps.result_total_count = len(df)
     return {"sql": sql, "row_count": len(df), "columns": list(df.columns)}
 
 

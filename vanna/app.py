@@ -161,7 +161,7 @@ def chat_stream():
                     **output.model_dump(),
                     'data': rows,
                     'columns': columns,
-                    'row_count': len(rows),
+                    'row_count': deps.result_total_count,
                     'chart_spec': chart_spec,
                     'session_id': session_id,
                 }
@@ -220,7 +220,7 @@ def chat():
         columns = deps.result_columns
         output['data'] = rows
         output['columns'] = columns
-        output['row_count'] = len(rows)
+        output['row_count'] = deps.result_total_count
 
         # Enrich explore results with a server-side chart spec
         if result.output.intent == 'explore' and columns and rows:
@@ -416,6 +416,36 @@ def feedback():
         with open(feedback_path, 'a') as f:
             f.write(json.dumps(entry) + '\n')
         return jsonify({"status": "recorded"})
+
+
+@flask_app.route('/export', methods=['POST'])
+def export_csv():
+    """Re-execute SQL and stream the full result as a CSV download."""
+    body = request.get_json(silent=True) or {}
+    sql = (body.get('sql') or request.form.get('sql') or '').strip()
+    if not sql:
+        return jsonify({"error": "sql required"}), 400
+
+    try:
+        df = vn.run_sql(sql)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    def generate():
+        yield ','.join(df.columns) + '\n'
+        for _, row in df.iterrows():
+            def _fmt(v):
+                if v is None:
+                    return ''
+                s = str(v)
+                return f'"{s.replace(chr(34), chr(34)*2)}"' if (',' in s or '"' in s or '\n' in s) else s
+            yield ','.join(_fmt(v) for v in row) + '\n'
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype='text/csv',
+        headers={'Content-Disposition': 'attachment; filename="export.csv"'},
+    )
 
 
 @flask_app.route('/health', methods=['GET'])
