@@ -32,7 +32,7 @@ from vn import get_vanna
 flask_app = Flask(__name__)
 vn = get_vanna()
 
-# Warm up BM25 index in background so the first user query is fast.
+# Warm up ChromaDB/ONNX in background so the first user query is fast.
 import threading
 def _warmup():
     try:

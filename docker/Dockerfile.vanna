@@ -4,8 +4,8 @@ WORKDIR /app
 
 RUN pip install --no-cache-dir \
     "pydantic-ai[openai]" \
+    "vanna[chromadb,openai]" \
     psycopg2-binary \
-    rank-bm25 \
     pandas \
     python-dotenv \
     flask \

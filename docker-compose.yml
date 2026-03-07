@@ -232,9 +232,10 @@ services:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - VANNA_MODEL=${VANNA_MODEL:-deepseek-chat}
-      - BM25_PATH=/data/vanna-bm25
+      - CHROMA_PATH=/data/vanna-chroma
     volumes:
       - ~/data:/data
+      - ~/data/chroma-cache:/root/.cache/chroma
       - ./dbt:/dbt
       - /var/run/docker.sock:/var/run/docker.sock
     ports:

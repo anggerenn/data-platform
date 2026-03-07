@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from pydantic_ai import Agent, RunContext
 
 from agents._model import make_model
-from vn import VannaLite
+from vn import VannaAI
 
 
 class ChatResponse(BaseModel):
@@ -18,7 +18,7 @@ class ChatResponse(BaseModel):
 
 @dataclass
 class AgentDeps:
-    vanna: VannaLite
+    vanna: VannaAI
     sql_cache: dict = field(default_factory=dict)
     # Populated by explore_data tool — rows bypass the LLM entirely
     result_rows: list = field(default_factory=list)
