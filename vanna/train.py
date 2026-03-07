@@ -271,8 +271,8 @@ SELECT
     revenue,
     prev_revenue,
     ROUND(
-        (revenue - prev_revenue) / NULLIF(prev_revenue, 0) * 100,
-    2) AS growth_pct
+        ((revenue - prev_revenue) / NULLIF(prev_revenue, 0) * 100)::NUMERIC, 2
+    ) AS growth_pct
 FROM (
     SELECT
         DATE_TRUNC('month', order_date) AS month_start,
@@ -294,9 +294,9 @@ SELECT
     monthly_revenue,
     prev_month_revenue,
     ROUND(
-        (monthly_revenue - prev_month_revenue)
-        / NULLIF(prev_month_revenue, 0) * 100,
-    2) AS growth_pct
+        ((monthly_revenue - prev_month_revenue)
+        / NULLIF(prev_month_revenue, 0) * 100)::NUMERIC, 2
+    ) AS growth_pct
 FROM (
     SELECT
         month,
@@ -323,6 +323,41 @@ SELECT
 FROM transformed_marts.daily_sales
 GROUP BY DATE_TRUNC('month', order_date), category
 ORDER BY month, monthly_revenue DESC
+""")
+
+vn.train(
+    question="What is the revenue contribution of each city as a percentage of total?",
+    sql="""
+SELECT
+    city,
+    SUM(total_revenue) AS city_revenue,
+    ROUND((SUM(total_revenue) / SUM(SUM(total_revenue)) OVER () * 100)::NUMERIC, 2) AS pct_of_total
+FROM transformed_marts.daily_sales
+GROUP BY city
+ORDER BY city_revenue DESC
+""")
+
+vn.train(
+    question="Show me top customer by revenue per city in march 2026 with their contribution to city total",
+    sql="""
+SELECT
+    city,
+    customer_id,
+    customer_revenue,
+    ROUND((customer_revenue / city_total * 100)::NUMERIC, 2) AS pct_of_city
+FROM (
+    SELECT
+        city,
+        customer_id,
+        SUM(line_total) AS customer_revenue,
+        SUM(SUM(line_total)) OVER (PARTITION BY city) AS city_total,
+        ROW_NUMBER() OVER (PARTITION BY city ORDER BY SUM(line_total) DESC) AS rn
+    FROM transformed_staging.stg_orders
+    WHERE order_date >= '2026-03-01' AND order_date < '2026-04-01'
+    GROUP BY city, customer_id
+) ranked
+WHERE rn = 1
+ORDER BY customer_revenue DESC
 """)
 
 print("Training complete.")

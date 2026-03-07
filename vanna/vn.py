@@ -17,6 +17,7 @@ Rules:
 - Use CURRENT_DATE for today's date
 - Use INTERVAL '1 month' syntax (with quotes) for date arithmetic
 - Use NULLIF(expr, 0) for safe division
+- Use ROUND((expr)::NUMERIC, 2) to round — cast the ENTIRE expression to NUMERIC before ROUND; PostgreSQL ROUND(double precision, int) is not supported
 - GROUP BY must use column expressions, not aliases
 - Schemas: raw (source), transformed_staging (views), transformed_marts (tables)
 - For date filters use ISO string literals directly: WHERE order_date >= '2026-03-01'

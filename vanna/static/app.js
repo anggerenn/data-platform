@@ -342,8 +342,9 @@ function renderResult(result) {
     thead.appendChild(headRow);
     table.appendChild(thead);
 
+    const DISPLAY_LIMIT = 20;
     const tbody = document.createElement('tbody');
-    result.data.forEach(row => {
+    result.data.slice(0, DISPLAY_LIMIT).forEach(row => {
       const tr = document.createElement('tr');
       result.columns.forEach(col => {
         const td = document.createElement('td');
@@ -370,7 +371,10 @@ function renderResult(result) {
 
     const countEl = document.createElement('div');
     countEl.className = 'row-count';
-    countEl.textContent = `${result.row_count} row${result.row_count !== 1 ? 's' : ''}`;
+    const truncated = result.row_count > DISPLAY_LIMIT;
+    countEl.textContent = truncated
+      ? `Showing ${DISPLAY_LIMIT} of ${result.row_count} rows — export CSV for full results`
+      : `${result.row_count} row${result.row_count !== 1 ? 's' : ''}`;
     wrap.appendChild(countEl);
 
     const csvBtn = document.createElement('button');
