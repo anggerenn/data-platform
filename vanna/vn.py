@@ -36,6 +36,7 @@ class VannaLite:
     def _get_conn(self):
         if self._conn is None or self._conn.closed:
             self._conn = psycopg2.connect(**self._conn_kwargs)
+            self._conn.autocommit = True
         return self._conn
 
     def train(self, ddl=None, documentation=None, question=None, sql=None):

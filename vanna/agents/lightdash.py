@@ -312,10 +312,11 @@ def _trigger_deploy(host_dbt_path: str, network: str) -> tuple[bool, str]:
             return False, "lightdash-deploy image not found — run docker-compose build first"
 
         env = {
-            'CLICKHOUSE_HOST': os.environ.get('CLICKHOUSE_HOST', 'clickhouse'),
-            'CLICKHOUSE_PORT': os.environ.get('CLICKHOUSE_PORT', '8123'),
-            'CLICKHOUSE_USER': 'bi_readonly',
-            'CLICKHOUSE_PASSWORD': os.environ.get('CLICKHOUSE_PASSWORD', ''),
+            'ANALYTICS_DB_HOST': os.environ.get('ANALYTICS_DB_HOST', 'analytics-db'),
+            'ANALYTICS_DB_PORT': os.environ.get('ANALYTICS_DB_PORT', '5432'),
+            'ANALYTICS_DB_NAME': os.environ.get('ANALYTICS_DB_NAME', 'analytics'),
+            'ANALYTICS_DB_USER': 'bi_readonly',
+            'ANALYTICS_DB_PASSWORD': os.environ.get('ANALYTICS_DB_PASSWORD', ''),
             'LIGHTDASH_URL': 'http://lightdash:8080',
             'LIGHTDASH_EMAIL': os.environ.get('LIGHTDASH_EMAIL', ''),
             'LIGHTDASH_PASSWORD': os.environ.get('LIGHTDASH_PASSWORD', ''),

@@ -9,3 +9,4 @@ default:
       password: "{{ env_var('ANALYTICS_DB_PASSWORD') }}"
       dbname: "{{ env_var('ANALYTICS_DB_NAME', 'analytics') }}"
       schema: transformed
+      sslmode: disable

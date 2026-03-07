@@ -232,6 +232,7 @@ def chat():
 
         return jsonify({**output, "session_id": session_id})
     except Exception as e:
+        sessions.setdefault(session_id, [])  # register session even on failure
         return jsonify({
             "intent": "explore",
             "text": f"Something went wrong: {e}",
