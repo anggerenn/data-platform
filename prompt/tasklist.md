@@ -146,6 +146,26 @@ Replace with BM25 (rank-bm25) — no embedding model needed, ~60MB target.
 
 ## Backlog
 
+### Maintainer DX — schema.yml authoring
+- [ ] **`docs/schema-template.yml`** — annotated reference file clients copy; every field commented with what it does, valid values, and what breaks if missing
+- [ ] **Better validator error messages** in `validate_schema.py` — currently fails generically; should say exactly which field is missing, on which model, and point to the template. Example:
+  ```
+  ERROR: daily_sales missing meta.grain
+  Expected: meta.grain: [col1, col2] — columns that form the surrogate key
+  See: docs/schema-template.yml
+  ```
+- [ ] **JSON Schema for `schema.yml`** — drop in `.vscode/settings.json`; maintainer gets autocomplete + inline red underlines as they type, no CI run needed to catch mistakes
+
+### Maintainer DX — Lightdash YAML authoring (charts, dashboards, PRD)
+- [ ] **`docs/chart-template.yml`** and **`docs/dashboard-template.yml`** — annotated reference files showing every required field with comments; UUIDs/slugs explained; `metricQuery` structure documented with examples
+- [ ] **`docs/prd-template.json`** — reference PRD JSON with all fields explained (metrics vs dimensions distinction, what `model` refers to, what `built_at` is)
+- [ ] **Lightdash YAML validator** — extend `validate_schema.py` or add a separate `validate_lightdash.py` that checks:
+  - chart YAMLs: required fields (`name`, `tableName`, `metricQuery`, `slug`, `chartConfig`, `spaceSlug`)
+  - dashboard YAMLs: required fields, that all `chartSlug` references in tiles resolve to an existing chart file, tab UUIDs are valid
+  - PRD JSONs: all required fields present, `model` references a real dbt model
+- [ ] **JSON Schema for chart and dashboard YAMLs** — IDE autocomplete for Lightdash content-as-code format
+- [ ] Add Lightdash YAML validation to `.github/workflows/validate-schema.yml` so bad YAMLs are caught on PR before they reach `lightdash upload`
+
 ### Latency — reduce LLM round-trips
 - Each explore query makes 3 sequential LLM calls: router intent (~400ms) + vanna generate_sql (~2700ms) + router summary (~400ms)
 - ChromaDB ONNX retrieval adds ~967ms on top
