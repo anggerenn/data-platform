@@ -332,8 +332,15 @@ def dashboard_build():
     try:
         prd = PRD(**prd_data)
 
+        # Data Modeler first (fast, deterministic) — model_name feeds housekeeper
+        model_result = asyncio.run(run_data_modeler(prd, _DBT_PATH))
+
+        if model_result.needs_new_model:
+            return jsonify({"needs_new_model": True, "error": "No existing model covers these metrics."})
+
         # Housekeeper: advisory only — never blocks, user is the decision maker
-        verdict = housekeeper_check(prd, vn)
+        # model_name enables model-level structural comparison
+        verdict = housekeeper_check(prd, vn, model_name=model_result.model_name)
         if verdict.verdict != 'none':
             housekeeper_info = {
                 'housekeeper': verdict.verdict,
@@ -359,11 +366,6 @@ def dashboard_build():
                     housekeeper_info['readme_updated'] = updated
             except Exception:
                 pass
-
-        model_result = asyncio.run(run_data_modeler(prd, _DBT_PATH))
-
-        if model_result.needs_new_model:
-            return jsonify({"needs_new_model": True, "error": "No existing model covers these metrics."})
 
         # Instructor: generate guide before build so it can be embedded as a markdown tile
         try:

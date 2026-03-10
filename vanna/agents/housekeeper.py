@@ -132,11 +132,39 @@ def _has_prd(dbt_path: str, name: str) -> bool:
     return os.path.exists(path)
 
 
+def _chart_field_keywords(dbt_path: str, dashboard_slug: str) -> set:
+    """Load field-level keyword signal from chart YAMLs linked to a dashboard."""
+    dashboard_path = os.path.join(dbt_path, 'lightdash', 'dashboards', f'{dashboard_slug}.yml')
+    charts_dir = os.path.join(dbt_path, 'lightdash', 'charts')
+    kws: set = set()
+    if not os.path.exists(dashboard_path):
+        return kws
+    try:
+        with open(dashboard_path) as f:
+            doc = yaml.safe_load(f) or {}
+        for tile in doc.get('tiles', []):
+            chart_slug = tile.get('properties', {}).get('chartSlug', '')
+            if not chart_slug:
+                continue
+            chart_path = os.path.join(charts_dir, f'{chart_slug}.yml')
+            if not os.path.exists(chart_path):
+                continue
+            with open(chart_path) as f:
+                chart_doc = yaml.safe_load(f) or {}
+            mq = chart_doc.get('metricQuery', {})
+            for fid in mq.get('metrics', []) + mq.get('dimensions', []):
+                kws |= _keywords(_normalise_field(fid))
+    except Exception:
+        pass
+    return kws
+
+
 def _build_fingerprints(dbt_path: str) -> list:
     """Build fingerprints from PRD JSON files (authoritative metric vocabulary).
 
     PRD files use the same human-readable metric text as new PRDs, giving
-    meaningful Jaccard similarity. API is only used to look up dashboard URLs.
+    meaningful Jaccard similarity. Chart field IDs are merged in as a
+    structural signal (field-level overlap). API is only used for URLs.
 
     Governance rules:
       - [WIP]-prefixed dashboard titles are excluded
@@ -162,11 +190,16 @@ def _build_fingerprints(dbt_path: str) -> list:
                 continue
             metrics = prd_data.get('metrics', [])
             objective = prd_data.get('objective', '')
+            model = prd_data.get('model', '')
+            # Narrative keywords + field-level keywords from chart YAMLs
+            dashboard_slug = _slugify(name)
             kws = _keywords(' '.join(metrics) + ' ' + objective)
+            kws |= _chart_field_keywords(dbt_path, dashboard_slug)
             fingerprints.append({
                 'name': name,
                 'url': url_by_name.get(name, ''),
                 'keywords': kws,
+                'model': model,
             })
 
     prd_names = {fp['name'] for fp in fingerprints}
@@ -206,7 +239,7 @@ def _build_fingerprints(dbt_path: str) -> list:
             for tile in doc.get('tiles', []):
                 slug = tile.get('properties', {}).get('chartSlug', '')
                 all_kws |= chart_kws.get(slug, set())
-            yaml_fps.append({'name': name, 'url': '', 'keywords': all_kws})
+            yaml_fps.append({'name': name, 'url': '', 'keywords': all_kws, 'model': ''})
 
     return fingerprints + yaml_fps
 
@@ -305,7 +338,7 @@ async def _llm_disambiguate(prd, existing: dict, score: float) -> _LLMVerdict:
 
 # ── Public entry point (sync) ──────────────────────────────────────────────────
 
-def check(prd, vn=None) -> HousekeeperVerdict:
+def check(prd, vn=None, model_name: Optional[str] = None) -> HousekeeperVerdict:
     fingerprints = _build_fingerprints(_DBT_PATH)
     if not fingerprints:
         return HousekeeperVerdict(verdict='none', reason='No existing dashboards to compare.')
@@ -317,6 +350,15 @@ def check(prd, vn=None) -> HousekeeperVerdict:
         key=lambda x: x[1], reverse=True,
     )
     best, score = scored[0]
+
+    # Model-level signal: same dbt model → treat as at least partial overlap
+    # even when narrative Jaccard is low (catches same-data, different-framing)
+    if model_name and score < _PARTIAL_THRESHOLD:
+        for fp, s in scored:
+            if fp.get('model') == model_name:
+                score = _PARTIAL_THRESHOLD
+                best = fp
+                break
 
     if score >= _FULL_THRESHOLD:
         return HousekeeperVerdict(
