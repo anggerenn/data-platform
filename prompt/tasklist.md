@@ -207,7 +207,8 @@ Replace with BM25 (rank-bm25) — no embedding model needed, ~60MB target.
 - [x] Fixed: switched export from form POST to fetch+blob (encoding corruption); strip trailing LIMIT in /export backend
 
 ### Data Modeler — model selection misses staging table
-- [x] Fixed: _needs_customer_grain() restricts candidates to models with customer_id when PRD mentions customer-level grain
+- [x] Partial fix: _needs_customer_grain() restricts candidates to models with customer_id when PRD mentions customer-level grain
+- [ ] **Backlog — proper fix:** current approach is hardcoded to customer_id keywords and won't scale to 3+ tables or new grain levels. Proper approach: generate SQL via Vanna for each PRD metric, inspect which columns/tables the SQL references, then map back to the dbt model that covers that grain. Alternatively, use surrogate/primary key inference — identify the lowest-granularity key required by the PRD and find the model whose PK matches. Data Modeler should reason about required joins, not match keywords.
 
 ### Instructor — update README when dashboard is enriched with new narrative
 - [x] merge_guides() merges existing + new PRD; update_readme_tile() updates YAML + redeploys; wired in app.py on partial_uncovered
