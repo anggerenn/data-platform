@@ -166,6 +166,12 @@ Replace with BM25 (rank-bm25) — no embedding model needed, ~60MB target.
 - [ ] **JSON Schema for chart and dashboard YAMLs** — IDE autocomplete for Lightdash content-as-code format
 - [ ] Add Lightdash YAML validation to `.github/workflows/validate-schema.yml` so bad YAMLs are caught on PR before they reach `lightdash upload`
 
+### SQL validation + correction loop (gap vs Wren AI)
+- [ ] Currently `explore_data` executes SQL directly — if DeepSeek generates bad SQL it just errors with no retry
+- [ ] Add a dry-run validation step before execution: run `EXPLAIN` (or execute with `LIMIT 0`) to catch syntax/schema errors without fetching data
+- [ ] On validation failure, retry SQL generation with the error message as additional context — up to 3 attempts (same pattern as Wren's `SqlCorrectionPipeline`)
+- [ ] Implementation: in `router.py` `explore_data` tool — wrap `vn.run_sql()` with a validate-then-execute pattern; pass error back to `vn.generate_sql()` on retry with a correction prompt
+
 ### Latency — reduce LLM round-trips
 - Each explore query makes 3 sequential LLM calls: router intent (~400ms) + vanna generate_sql (~2700ms) + router summary (~400ms)
 - ChromaDB ONNX retrieval adds ~967ms on top
