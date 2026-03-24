@@ -35,7 +35,12 @@ def _needs_customer_grain(metrics: list[str]) -> bool:
     return any(kw in combined for kw in _CUSTOMER_GRAIN)
 
 
+_scan_cache: dict[str, list[dict]] = {}
+
+
 def _scan_models(dbt_path: str) -> list[dict]:
+    if dbt_path in _scan_cache:
+        return _scan_cache[dbt_path]
     results = []
     schema_prefix = os.environ.get('DBT_SCHEMA_PREFIX', 'transformed_')
     for schema_file in glob.glob(
@@ -58,6 +63,7 @@ def _scan_models(dbt_path: str) -> list[dict]:
                 'description': m.get('description', ''),
                 'canonical': bool(m.get('meta', {}).get('canonical')),
             })
+    _scan_cache[dbt_path] = results
     return results
 
 

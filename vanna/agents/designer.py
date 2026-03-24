@@ -31,7 +31,7 @@ class ChartSpec(BaseModel):
 
 def _build_model() -> OpenAIModel:
     return OpenAIModel(
-        'deepseek-chat',
+        os.environ.get('VANNA_MODEL', 'deepseek-chat'),
         provider=OpenAIProvider(
             base_url='https://api.deepseek.com',
             api_key=os.environ.get('DEEPSEEK_API_KEY', ''),
