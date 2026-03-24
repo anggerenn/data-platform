@@ -121,10 +121,10 @@ Replace with BM25 (rank-bm25) — no embedding model needed, ~60MB target.
 - [ ] Referential integrity staging → marts
 
 ### Smoke tests (extend `smoke_test.py`)
-- [ ] DPM Agent: clarification flow returns PRD
-- [ ] Data Modeler Agent: SQL valid + ClickHouse executes
-- [ ] Data Visualizer Agent: valid Lightdash YAML generated
-- [ ] End-to-end dashboard round-trip (save → deploy → URL accessible)
+- [x] DPM Agent: clarification flow returns PRD
+- [x] Data Modeler Agent: SQL valid + PostgreSQL executes
+- [x] Data Visualizer Agent: valid Lightdash YAML generated
+- [x] End-to-end dashboard round-trip (save → deploy → URL accessible)
 
 ### GitHub Actions
 - [ ] On push: pytest unit tests + dbt test (ClickHouse service container)
@@ -146,6 +146,9 @@ Replace with BM25 (rank-bm25) — no embedding model needed, ~60MB target.
 - [x] **Docker socket failure is silent** (`lightdash.py`) — replace bare `except Exception` with specific exception + surfaced error in API response
 - [x] **Missing env vars in `.env.example`** — add `GEMINI_API_KEY`, `HOST_DBT_PATH`, `DOCKER_NETWORK_NAME`
 - [x] **`asyncio.run()` in housekeeper** (`housekeeper.py`) — replace with sync HTTP or restructure to avoid blocking async event loop
+
+### P3 — Found during E2E test (2026-03-24, session 10)
+- [x] **`DPMResponse` accepts `prd=null` when `status=complete`** (`planner.py`) — LLM occasionally omits PRD object but marks complete; fixed with `model_validator` that forces pydantic-ai retry
 
 ### P2 — Fragile / incomplete
 - [x] **`meta.grain` not declared** (`dbt/models/*/schema.yml`) — add `meta.grain` and `meta.relationships` to all models; update `builder.py` to use them instead of `_needs_customer_grain()` heuristic

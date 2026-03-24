@@ -1,5 +1,23 @@
 # Project Progress
 
+## Session 10 — E2E Local Test + DPM Bug Fix (2026-03-24)
+
+### E2E smoke test — full stack verified
+- Rebuilt vanna container from latest code (was 17 days stale, pre-fix)
+- Ran all 39 unit tests (test_app_utils, test_housekeeper, test_routes) inside container: **39/39 pass**
+  - Note: `test_vec.py` skipped — BM25 was reverted to ChromaDB; `vec.py` no longer exists
+- Ran full smoke test (`vanna/smoke_test.py`): **7/7 pass**
+  - Chat: explore × 3, semantic × 2, clarify × 1
+  - Dashboard: DPM 5-turn clarification → PRD → 4 charts → YAML written → URL returned
+
+### Bug found and fixed: DPM returns `status=complete` with `prd=null`
+- **Root cause:** `DPMResponse.prd` is `Optional[PRD] = None`, so pydantic accepts `null` even when `status=complete`. LLM occasionally omits the PRD object but marks itself done.
+- **Symptom:** `/dashboard/build` returned HTTP 400 "No completed PRD in session" — the session's `prd` key was `None`
+- **Fix:** Added `model_validator(mode='after')` to `DPMResponse` in `vanna/agents/planner.py` that raises `ValueError` when `status=complete` and `prd is None`. pydantic-ai catches the validation failure and retries the LLM call with the error as feedback — guarantees a populated PRD before the build proceeds.
+- Committed: `fix(planner): enforce PRD presence when DPM status is complete`
+
+---
+
 ## Session 9 — P2 Fixes (2026-03-24)
 
 ### Fix: `meta.grain` declared on all dbt models
