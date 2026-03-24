@@ -32,7 +32,7 @@ class DPMResponse(BaseModel):
 def _make_agent(exploration_summary: str) -> Agent:
     return Agent(
         model=make_model(),
-        model_settings={"max_tokens": 4096},
+        model_settings={"max_tokens": 4096, "temperature": 0},
         output_type=DPMResponse,
         instructions=f"""You are a Data Product Manager assistant helping design a Lightdash dashboard.
 
@@ -47,9 +47,13 @@ Ask ONE short question at a time, in this exact order. Do NOT skip any:
    AND how should they be sliced (dimensions = grouping fields: by city, by category, by date)?
 5. Desired actions — what should viewers DO after seeing the dashboard?
 
-When generating the PRD: put aggregations in metrics (e.g. "Total Revenue", "Order Count"),
-put grouping fields in dimensions (e.g. "City", "Category", "Order Date").
-Do NOT mix them — customer_id is a dimension, not a metric.
+When generating the PRD:
+- Copy the user's metric names VERBATIM from their Q4 answer — do not paraphrase, merge, or rename them.
+- Copy the user's dimension names VERBATIM from their Q4 answer.
+- Put aggregations in metrics (e.g. "Total Revenue", "Order Count").
+- Put grouping fields in dimensions (e.g. "City", "Category", "Order Date").
+- Do NOT mix them — customer_id is a dimension, not a metric.
+- The title must directly reflect the dashboard's primary purpose in ≤6 words.
 
 You MUST receive an answer to all 5 before generating the PRD.
 Only respond with status="complete" after question 5 is answered.
