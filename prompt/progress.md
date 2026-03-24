@@ -1,5 +1,61 @@
 # Project Progress
 
+## Session 8 — P0 Bug Fixes (2026-03-24)
+
+### Fix: `needs_new_model` stub (`app.py`)
+- Was: `return jsonify({"needs_new_model": True, "error": "No existing model covers these metrics."})` — dead end for the user
+- Now: calls `vn.generate_sql()` using the PRD objective + metrics as the question, returns `suggested_sql` with a clear message instructing the user to add it as a new dbt model and retry
+- Gracefully falls back to `suggested_sql: null` if SQL generation fails
+
+### Verified done: `merge_guides()` already correct (`instructor.py`)
+- `_merge()` already combines both existing PRD + new PRD in the prompt before calling LLM
+- `update_readme_tile()` reads existing YAML and overwrites the markdown tile correctly
+- Gap note from Session 7 was stale — fix was applied in Session 6; tasklist updated
+
+### Fix: `answer_semantic` returns question unchanged (`router.py`)
+- Tool was `return question` — echoed the input, giving the agent no useful context
+- Fixed: calls `vn.get_related_documentation(question)` (ChromaDB retrieval, no LLM), returns top-5 schema docs as context
+- Agent LLM now has grounded schema context to write a real answer
+
+### Fix: `sql_cache` missing on non-streaming `/chat` path (`app.py`)
+- `AgentDeps(vanna=vn)` → `AgentDeps(vanna=vn, sql_cache=_sql_cache)` on line 210
+- Streaming path (`/chat/stream`) already had this; non-streaming path was silently bypassing the cache on every call
+
+---
+
+## Session 7 — Gap Analysis (2026-03-24)
+
+### Architecture review + Wren AI comparison
+Full codebase scan to identify broken wiring, missing implementations, silent failures, and deploy blockers. Researched Wren AI architecture (MDL, SQL correction loop, instructions registry). No code changed — all findings documented in tasklist.md.
+
+### Design decision — Instruction registry
+Root cause of wrong SQL: LLM picks between `revenue`, `amount`, `line_total` with no explicit rule. Solution: static YAML instruction registry loaded into Vanna's system prompt at startup.
+- `vanna/instructions/global.yml` — layer priority rule: marts → staging → raw
+- `vanna/instructions/layers/marts.yml` — term → SQL mappings for canonical metrics layer
+- `vanna/instructions/layers/raw.yml` — term → SQL mappings per raw source (grows as more sources land)
+- Team-based dynamic overrides (load from Lightdash user API) — deferred until Lightdash auth is wired
+
+### P0 gaps found (broken right now)
+- `answer_semantic` tool in `router.py` echoes the question unchanged — no LLM answer generated
+- `merge_guides()` in `instructor.py` generates a new guide from scratch on every call — existing README narrative is lost
+- `sql_cache` not passed to `AgentDeps` on non-streaming `/chat` path in `app.py` — caching is inconsistent
+- `needs_new_model: True` case in `app.py` is a stub — any PRD requiring a new dbt model is completely blocked
+
+### P1 gaps found (silent failures on VPS)
+- `localhost` hardcoded as default in `vn.py`, `app.py`, `housekeeper.py` — works locally, breaks on VPS
+- Docker socket failure in `lightdash.py` caught by bare `except Exception` — user sees nothing
+- `GEMINI_API_KEY`, `HOST_DBT_PATH`, `DOCKER_NETWORK_NAME` missing from `.env.example`
+- `asyncio.run()` in `housekeeper.py` — deadlock risk if called from async context
+
+### P2 gaps found (fragile)
+- No `meta.grain` declared on any dbt model — builder.py falls back to `_needs_customer_grain()` keyword heuristic
+- Designer hardcodes `'deepseek-chat'` instead of reading `VANNA_MODEL` env var
+- Zero Flask route tests or agent pipeline integration tests
+- `_scan_models()` re-parses all schema YAMLs on every dashboard build
+- Housekeeper makes cascading sequential Lightdash API calls (no batching or caching)
+
+---
+
 ## Session 6 — Completed Work (2026-03-10)
 
 ### Bug fixes

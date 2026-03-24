@@ -66,8 +66,11 @@ async def explore_data(ctx: RunContext[AgentDeps], question: str) -> dict:
 
 @agent.tool
 async def answer_semantic(ctx: RunContext[AgentDeps], question: str) -> str:
-    """Answer a definitional or conceptual question."""
-    return question
+    """Answer a definitional or conceptual question using schema documentation."""
+    docs = ctx.deps.vanna.get_related_documentation(question)
+    if docs:
+        return "Schema context:\n" + "\n".join(docs[:5])
+    return "No schema documentation found. Answer from general knowledge."
 
 
 @agent.tool

@@ -133,13 +133,37 @@ Replace with BM25 (rank-bm25) — no embedding model needed, ~60MB target.
 
 ---
 
+## Up Next — Gap Fixes (found 2026-03-24)
+
+### P0 — Broken right now
+- [x] **`answer_semantic` returns question unchanged** (`router.py`) — tool body does `return question`; should call LLM with schema context to produce a real answer
+- [x] **`merge_guides()` is a no-op** (`instructor.py`) — generates new guide from scratch, ignores existing README; fix `_merge()` to combine both PRDs before generating
+- [x] **`sql_cache` missing on non-streaming path** (`app.py`) — `AgentDeps(vanna=vn)` missing `sql_cache=_sql_cache`; caching broken on `/chat` endpoint
+- [x] **`needs_new_model` unimplemented** (`app.py`) — stub returns error; implement minimal dbt model scaffolding or at least a clear user-facing message with the required SQL
+
+### P1 — Silent failures on VPS
+- [ ] **Hardcoded `localhost` defaults** — remove defaults from `vn.py`, `app.py`, `housekeeper.py`; require explicit env vars
+- [ ] **Docker socket failure is silent** (`lightdash.py`) — replace bare `except Exception` with specific exception + surfaced error in API response
+- [ ] **Missing env vars in `.env.example`** — add `GEMINI_API_KEY`, `HOST_DBT_PATH`, `DOCKER_NETWORK_NAME`
+- [ ] **`asyncio.run()` in housekeeper** (`housekeeper.py`) — replace with sync HTTP or restructure to avoid blocking async event loop
+
+### P2 — Fragile / incomplete
+- [ ] **`meta.grain` not declared** (`dbt/models/*/schema.yml`) — add `meta.grain` and `meta.relationships` to all models; update `builder.py` to use them instead of `_needs_customer_grain()` heuristic
+- [ ] **Designer hardcodes model name** (`designer.py`) — replace `'deepseek-chat'` with `os.environ.get('VANNA_MODEL', 'deepseek-chat')`
+- [ ] **Flask route tests missing** (`tests/`) — add pytest tests for `/chat/stream`, `/dashboard/build`, `/export`, `/feedback`
+- [ ] **`_scan_models()` re-parses on every call** (`builder.py`) — cache result at module level, invalidate on file change
+- [ ] **Housekeeper API calls not batched** (`housekeeper.py`) — reduce cascading per-chart calls; fetch dashboard tiles in bulk where Lightdash API allows
+
+---
+
 ## Up Next — VPS Deployment
 
 ### Deploy to Coolify
 - [ ] Push all changes to git (main branch)
-- [ ] Redeploy vanna + clickhouse services via Coolify
+- [ ] Redeploy vanna + analytics-db + lightdash services via Coolify (ClickHouse removed — now PostgreSQL)
 - [ ] Re-run `lightdash-deploy` on VPS
-- [ ] Set `LIGHTDASH_API_KEY` in Coolify env vars after first boot
+- [ ] Set `LIGHTDASH_API_KEY`, `GEMINI_API_KEY`, `ANALYTICS_DB_*` in Coolify env vars
+- [ ] Mount `/var/run/docker.sock` in Vanna container via Coolify volume config
 - [ ] Smoke test all services on VPS URLs
 
 ---
@@ -171,6 +195,55 @@ Replace with BM25 (rank-bm25) — no embedding model needed, ~60MB target.
 - [ ] Add a dry-run validation step before execution: run `EXPLAIN` (or execute with `LIMIT 0`) to catch syntax/schema errors without fetching data
 - [ ] On validation failure, retry SQL generation with the error message as additional context — up to 3 attempts (same pattern as Wren's `SqlCorrectionPipeline`)
 - [ ] Implementation: in `router.py` `explore_data` tool — wrap `vn.run_sql()` with a validate-then-execute pattern; pass error back to `vn.generate_sql()` on retry with a correction prompt
+
+### MDL-style metric injection into Vanna training (Wren-inspired)
+`meta.metrics` is defined in `schema.yml` and `train_from_schema.py` generates Q&A pairs from it, but the training docs don't explicitly tell the LLM *which expression to use and from which table* — so it still picks between `revenue`, `amount`, `line_total` arbitrarily.
+- [ ] Update `train_from_schema.py` to generate explicit disambiguation docs per metric: `"To calculate revenue, use SUM(total_revenue) from marts.daily_sales. Do not use amount or line_total from raw.orders unless customer-level grain is required."`
+- [ ] One doc per `meta.metrics` entry, one doc per raw source column that could be confused with a canonical metric
+- [ ] These docs feed into `vn.add_documentation()` on retrain — no new infra needed, just better training content
+
+### Question→SQL verified pairs (Wren-inspired)
+In-memory `_sql_cache` already skips re-generation for repeated questions. The gap is that validated pairs from 👍 feedback are not promoted into a persistent, curated registry.
+- [ ] Persist `_sql_cache` to `/data/sql_cache.json` on write, reload on startup — survives container restarts
+- [ ] On 👍 feedback: in addition to training ChromaDB, append `{question, sql, timestamp}` to `/data/verified_pairs.jsonl` — a human-reviewable log of confirmed good queries
+- [ ] `train.py` can ingest `verified_pairs.jsonl` on next retrain so confirmed pairs enter ChromaDB retrieval permanently
+
+### Explicit join paths as Vanna training docs (Wren-inspired)
+`meta.relationships` will be declared in `schema.yml` (see Data Modeler backlog), but they're only used by `builder.py` for model selection. The LLM generating SQL has no knowledge of join paths.
+- [ ] After `meta.relationships` are declared, extend `train_from_schema.py` to emit join-path docs: `"To join daily_sales to stg_orders, use order_date, category, city. stg_orders.customer_id is the customer grain key not present in daily_sales."`
+- [ ] One doc per relationship in `schema.yml` `meta.relationships`
+- [ ] Feeds into `vn.add_documentation()` — no new infra, improves multi-table SQL accuracy
+
+### Schema retrieval quality audit (Wren-inspired)
+ChromaDB retrieval is only as good as what was indexed. Currently `train_from_schema.py` adds Q&A pairs and metric docs but there's no audit of what actually gets retrieved for a given question.
+- [ ] Add a `vanna/scripts/audit_retrieval.py` script: given a sample question, print the top-K docs retrieved from ChromaDB — makes it visible what context the LLM sees before generating SQL
+- [ ] Run audit against 5–10 known questions; identify gaps where wrong docs surface or relevant docs are missing
+- [ ] Use audit results to improve training doc wording in `train_from_schema.py` and `train.py`
+
+### Instruction registry (Wren-inspired, static)
+Root cause of wrong queries: LLM picks between `revenue`, `amount`, `line_total` arbitrarily because no explicit rule says which to use and when. Fix: a static instruction registry loaded into Vanna's system prompt at startup.
+
+**Layer priority rule (global, always applies)**
+- [ ] Hard-code in `vanna/instructions/global.yml`: always prefer `marts` layer → `staging` → `raw`; only fall back when the required grain is absent from the higher layer
+
+**Per-layer term registries**
+- [ ] `vanna/instructions/layers/marts.yml` — maps business terms to canonical SQL expressions from `marts.daily_sales`:
+  - `"revenue"` → `SUM(total_revenue)`
+  - `"orders"` → `COUNT(DISTINCT order_id)` via `order_count`
+  - `"customers"` → `COUNT(DISTINCT customer_id)` via `customer_count`
+  - etc. — one entry per `meta.metrics` field in `schema.yml`
+- [ ] `vanna/instructions/layers/raw.yml` — maps same terms to row-level expressions from `raw.orders` (used only when marts grain is insufficient):
+  - `"revenue"` → `SUM(amount * quantity)` from `raw.orders`
+  - Add a section per source as new raw tables land (customers, events, etc.)
+  - Structure: `source_name`, `table`, `grain`, `term_mappings[]`
+
+**Registry loader**
+- [ ] `vanna/instructions/__init__.py` — `load_instructions() -> str` merges global + all layer YAMLs into a single plain-text block injected into Vanna's system prompt on startup
+- [ ] Layer files are YAML, human-editable, no code change needed to add a new term or source
+- [ ] On container start, `train.py` or `app.py` calls `load_instructions()` and passes result to `vn.add_documentation()`
+
+**Deferred — team-based dynamic overrides**
+- [ ] When Lightdash auth is wired: fetch user's group from Lightdash API, load `vanna/instructions/teams/{team}.yml` on top of global rules (e.g. finance team: use `net_revenue` not `total_revenue`); fall back to global if team unknown
 
 ### Latency — reduce LLM round-trips
 - Each explore query makes 3 sequential LLM calls: router intent (~400ms) + vanna generate_sql (~2700ms) + router summary (~400ms)
@@ -274,7 +347,7 @@ Replace with BM25 (rank-bm25) — no embedding model needed, ~60MB target.
 
 ## Completed
 
-- [x] ClickHouse setup with `bi_readonly` user (SELECT-only, password from env)
+- [x] Analytics DB (PostgreSQL) setup with `bi_readonly` user (SELECT-only, password from env) — migrated from ClickHouse in session 5
 - [x] dbt staging + marts models with `order_date` cast to `Date`
 - [x] Prefect pipeline: dlt ingestion → dbt transformation
 - [x] Lightdash with automated first-boot deploy + MinIO for file storage

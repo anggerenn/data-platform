@@ -207,7 +207,7 @@ def chat():
     history = _get_session(session_id)
 
     try:
-        deps = AgentDeps(vanna=vn)
+        deps = AgentDeps(vanna=vn, sql_cache=_sql_cache)
         result = asyncio.run(
             agent.run(question, deps=deps, message_history=history)
         )
@@ -336,7 +336,20 @@ def dashboard_build():
         model_result = asyncio.run(run_data_modeler(prd, _DBT_PATH))
 
         if model_result.needs_new_model:
-            return jsonify({"needs_new_model": True, "error": "No existing model covers these metrics."})
+            try:
+                question = f"{prd.objective} — metrics: {', '.join(prd.metrics)}"
+                suggested_sql = vn.generate_sql(question)
+            except Exception:
+                suggested_sql = None
+            return jsonify({
+                "needs_new_model": True,
+                "message": (
+                    "No existing dbt model covers these metrics. "
+                    "A new dbt model is needed to build this dashboard. "
+                    "Add the SQL below as a new model in dbt/models/, run dbt, then retry."
+                ),
+                "suggested_sql": suggested_sql,
+            })
 
         # Housekeeper: advisory only — never blocks, user is the decision maker
         # model_name enables model-level structural comparison
