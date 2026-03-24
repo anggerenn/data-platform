@@ -22,6 +22,15 @@ _FILLER = {
     'over', 'time', 'last', 'current', 'previous', 'vs', 'each', 'all',
 }
 
+# Keywords that represent aggregation functions / time-window calculations.
+# A metric whose remaining keywords are ALL in this set is computable from any
+# numeric+date model — do not flag it as uncovered.
+_AGGREGATE_TERMS = {
+    'mom', 'yoy', 'wow', 'mtd', 'ytd', 'wtd',
+    'avg', 'average', 'sum', 'count', 'num', 'number',
+    'pct', 'percent', 'ratio', 'index', 'rank', 'running', 'cumulative', 'rolling',
+}
+
 
 _scan_cache: dict[str, list[dict]] = {}
 
@@ -70,6 +79,10 @@ def _uncovered_metrics(model: dict, metrics: list[str]) -> list[str]:
     for m in metrics:
         keywords = list(set(re.findall(r'\w+', m.lower())) - _FILLER)
         if not keywords:
+            continue
+        # Pure aggregation/time-window metrics (e.g. "mom growth") are computable
+        # from any numeric+date model — skip coverage check entirely.
+        if all(kw in _AGGREGATE_TERMS for kw in keywords):
             continue
         matched = sum(1 for kw in keywords if any(kw in s or s in kw for s in searchable))
         if matched / len(keywords) < 0.5:

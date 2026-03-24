@@ -32,7 +32,7 @@ class DPMResponse(BaseModel):
 def _make_agent(exploration_summary: str) -> Agent:
     return Agent(
         model=make_model(),
-        model_settings={"max_tokens": 4096, "temperature": 0},
+        model_settings={"max_tokens": 4096},
         output_type=DPMResponse,
         instructions=f"""You are a Data Product Manager assistant helping design a Lightdash dashboard.
 
