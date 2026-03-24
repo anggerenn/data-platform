@@ -50,7 +50,7 @@ def _fetch_api_fingerprints() -> list:
     touch the dbt YAML files.
     """
     internal = os.environ.get('LIGHTDASH_INTERNAL_URL', 'http://lightdash:8080')
-    public   = os.environ.get('LIGHTDASH_PUBLIC_URL',   'http://localhost:8080')
+    public   = os.environ['LIGHTDASH_PUBLIC_URL']
     headers  = {'Authorization': f"ApiKey {os.environ.get('LIGHTDASH_API_KEY', '')}"}
 
     try:

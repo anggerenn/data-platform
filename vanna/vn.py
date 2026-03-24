@@ -76,7 +76,7 @@ def get_vanna() -> VannaAI:
         },
     )
     vn.connect_to_postgres(
-        host=os.environ.get('ANALYTICS_DB_HOST', 'localhost'),
+        host=os.environ['ANALYTICS_DB_HOST'],
         port=int(os.environ.get('ANALYTICS_DB_PORT', '5432')),
         user=os.environ.get('ANALYTICS_DB_USER', 'bi_readonly'),
         password=os.environ['ANALYTICS_DB_PASSWORD'],
