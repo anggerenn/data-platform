@@ -13,6 +13,7 @@ class DataModelResult(BaseModel):
     columns: list[str]
     is_new: bool
     needs_new_model: bool = False  # True when no existing model covers the PRD
+    uncovered_metrics: list[str] = []  # PRD metrics absent from chosen model
 
 
 _FILLER = {
@@ -53,6 +54,27 @@ def _scan_models(dbt_path: str) -> list[dict]:
             })
     _scan_cache[dbt_path] = results
     return results
+
+
+def _uncovered_metrics(model: dict, metrics: list[str]) -> list[str]:
+    """
+    Return PRD metrics where fewer than half the keywords match the model.
+
+    Uses a 0.5 fraction threshold (same logic as _coverage_score) to avoid
+    false positives from generic words like 'count' matching 'order_count'.
+    """
+    col_set = {c.lower() for c in model['columns']}
+    desc_words = set(re.findall(r'\w+', model['description'].lower()))
+    searchable = col_set | desc_words
+    uncovered = []
+    for m in metrics:
+        keywords = list(set(re.findall(r'\w+', m.lower())) - _FILLER)
+        if not keywords:
+            continue
+        matched = sum(1 for kw in keywords if any(kw in s or s in kw for s in searchable))
+        if matched / len(keywords) < 0.5:
+            uncovered.append(m)
+    return uncovered
 
 
 def _coverage_score(model: dict, metrics: list[str]) -> float:
@@ -124,11 +146,14 @@ async def run_data_modeler(prd, dbt_path: str) -> DataModelResult:
     dimensions = getattr(prd, 'dimensions', [])
     best = find_best_model(dbt_path, dimensions=dimensions, metrics=prd.metrics)
     if best:
+        uncovered = _uncovered_metrics(best, prd.metrics)
         return DataModelResult(
             model_name=best['name'],
             db_schema=best['db_schema'],
             columns=best['columns'],
             is_new=False,
+            needs_new_model=bool(uncovered),
+            uncovered_metrics=uncovered,
         )
     return DataModelResult(
         model_name='',

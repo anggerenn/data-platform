@@ -10,6 +10,7 @@ Dashboard mode: get_chart_spec(columns, rows, question, dashboard="lightdash")
                restricts catalog to charts the target BI tool can render natively.
 """
 import os
+import re
 from typing import Optional
 
 from pydantic import BaseModel
@@ -18,6 +19,27 @@ from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
 from chart_catalog import CHART_CATALOG, analyze_result, match_catalog
+
+_RANKING_RE = re.compile(
+    r'\b(top|bottom|most|least|highest|lowest|rank|ranked|leaderboard|best|worst)\b', re.I
+)
+
+
+def _drop_scatter_if_ranking(question: str, meta: dict, options: list) -> list:
+    """
+    Remove scatter from options when the question is a ranking/leaderboard query.
+
+    Scatter requires 2 numeric cols but for rankings one col is the entity metric
+    (e.g. total_revenue to rank by) not a second correlation axis — bar is correct.
+    Only applies when there is at least 1 categorical col to use as the x-axis.
+    """
+    if (
+        "scatter" in options
+        and meta["cat_cols"]
+        and _RANKING_RE.search(question)
+    ):
+        return [c for c in options if c != "scatter"]
+    return options
 
 
 class ChartSpec(BaseModel):
@@ -80,6 +102,8 @@ async def get_chart_spec(
 
         if not options:
             return ChartSpec()
+
+        options = _drop_scatter_if_ranking(question, meta, options)
 
         if len(options) == 1:
             # Only one viable chart — assign columns deterministically, skip LLM

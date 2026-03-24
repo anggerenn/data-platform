@@ -336,19 +336,33 @@ def dashboard_build():
         model_result = asyncio.run(run_data_modeler(prd, _DBT_PATH))
 
         if model_result.needs_new_model:
-            try:
+            uncovered = model_result.uncovered_metrics
+            if model_result.model_name:
+                # Partial coverage — a model was found but some metrics are absent
+                missing_str = ", ".join(f'"{m}"' for m in uncovered)
+                msg = (
+                    f"The best matching model ({model_result.model_name}) does not cover "
+                    f"these metrics: {missing_str}. "
+                    "Add the SQL below as a new dbt model in dbt/models/, run dbt, then retry."
+                )
+                question = f"{prd.objective} — missing metrics: {', '.join(uncovered)}"
+            else:
+                # No model at all
+                msg = (
+                    "No existing dbt model covers these metrics. "
+                    "A new dbt model is needed to build this dashboard. "
+                    "Add the SQL below as a new model in dbt/models/, run dbt, then retry."
+                )
                 question = f"{prd.objective} — metrics: {', '.join(prd.metrics)}"
+            try:
                 suggested_sql = vn.generate_sql(question)
             except Exception:
                 suggested_sql = None
             return jsonify({
                 "needs_new_model": True,
-                "message": (
-                    "No existing dbt model covers these metrics. "
-                    "A new dbt model is needed to build this dashboard. "
-                    "Add the SQL below as a new model in dbt/models/, run dbt, then retry."
-                ),
+                "message": msg,
                 "suggested_sql": suggested_sql,
+                "uncovered_metrics": uncovered,
             })
 
         # Housekeeper: advisory only — never blocks, user is the decision maker
