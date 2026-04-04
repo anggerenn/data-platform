@@ -22,6 +22,12 @@ services:
   lightdash:
     platform: linux/amd64
 
+  nginx:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.nginx
+    volumes: []
+
   lightdash-deploy:
     exclude_from_hc: true
 
