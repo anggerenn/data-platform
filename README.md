@@ -1,4 +1,4 @@
-# data-platform-agentic-bi
+# Data Platform Agentic BI
 
 Self-hosted data platform with an agentic BI layer — full pipeline from ingestion to transformation to BI, with AI agents that let stakeholders ask questions in plain English and automatically generate persistent dashboards.
 
