@@ -267,14 +267,14 @@ services:
   # nginx sits in front of Lightdash and injects the Vanna chat widget.
   # Lightdash UI is accessed via http://localhost:8080 (nginx port).
   nginx:
-    image: nginx:alpine
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.nginx
     depends_on:
       lightdash:
         condition: service_healthy
       vanna:
         condition: service_started
-    volumes:
-      - ./nginx/lightdash.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
       - "8080:80"
     networks:
