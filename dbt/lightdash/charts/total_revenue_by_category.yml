@@ -1,16 +1,16 @@
 name: Total Revenue by Category
 description: Total Revenue by Category
-tableName: high_value_customer_churn
-updatedAt: '2026-04-04T03:08:42.000Z'
+tableName: customer_retention_churn_prevention
+updatedAt: '2026-04-04T04:20:28.000Z'
 metricQuery:
-  exploreName: high_value_customer_churn
+  exploreName: customer_retention_churn_prevention
   dimensions:
-  - high_value_customer_churn_category
+  - customer_retention_churn_prevention_category
   metrics: &id001
-  - high_value_customer_churn_total_revenue_sum
+  - customer_retention_churn_prevention_total_revenue_sum
   filters: {}
   sorts:
-  - fieldId: high_value_customer_churn_total_revenue_sum
+  - fieldId: customer_retention_churn_prevention_total_revenue_sum
     descending: true
   limit: 500
   metricOverrides: {}
@@ -22,7 +22,7 @@ chartConfig:
   type: cartesian
   config:
     layout:
-      xField: high_value_customer_churn_category
+      xField: customer_retention_churn_prevention_category
       yField: *id001
     eChartsConfig:
       axes:
@@ -34,13 +34,13 @@ chartConfig:
         name: Total Revenue
         encode:
           xRef:
-            field: high_value_customer_churn_category
+            field: customer_retention_churn_prevention_category
           yRef:
-            field: high_value_customer_churn_total_revenue_sum
+            field: customer_retention_churn_prevention_total_revenue_sum
 slug: total_revenue_by_category
 tableConfig:
   columnOrder:
-  - high_value_customer_churn_category
-  - high_value_customer_churn_total_revenue_sum
+  - customer_retention_churn_prevention_category
+  - customer_retention_churn_prevention_total_revenue_sum
 spaceSlug: home
 version: 1

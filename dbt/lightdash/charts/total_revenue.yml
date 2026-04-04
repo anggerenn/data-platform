@@ -1,12 +1,12 @@
 name: Total Revenue
 description: Total Revenue
-tableName: high_value_customer_churn
-updatedAt: '2026-04-04T03:08:42.000Z'
+tableName: customer_retention_churn_prevention
+updatedAt: '2026-04-04T04:20:28.000Z'
 metricQuery:
-  exploreName: high_value_customer_churn
+  exploreName: customer_retention_churn_prevention
   dimensions: []
   metrics:
-  - high_value_customer_churn_total_revenue_sum
+  - customer_retention_churn_prevention_total_revenue_sum
   filters: {}
   sorts: []
   limit: 500
@@ -18,11 +18,11 @@ metricQuery:
 chartConfig:
   type: big_number
   config:
-    bigNumber: high_value_customer_churn_total_revenue_sum
+    bigNumber: customer_retention_churn_prevention_total_revenue_sum
     bigNumberLabel: Total Revenue
 slug: total_revenue
 tableConfig:
   columnOrder:
-  - high_value_customer_churn_total_revenue_sum
+  - customer_retention_churn_prevention_total_revenue_sum
 spaceSlug: home
 version: 1
