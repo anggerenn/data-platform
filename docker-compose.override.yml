@@ -1,4 +1,6 @@
-# Local development overrides — not used in production (Coolify ignores this file)
+# Local development overrides — auto-merged by Docker Compose CLI, ignored by Coolify.
+# Volumes use named fallbacks from docker-compose.yml (no changes needed).
+# Only adds host port bindings for local browser access.
 services:
   prefect-server:
     ports:

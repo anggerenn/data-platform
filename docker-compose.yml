@@ -1,13 +1,13 @@
-# docker/docker-compose.yml
 services:
   postgres:
     image: postgres:15
+    exclude_from_hc: true
     environment:
       POSTGRES_USER: prefect
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-prefect}
       POSTGRES_DB: prefect
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ${PREFECT_DB_DATA:-prefect_db_data}:/var/lib/postgresql/data
     networks:
       - data-network
     restart: unless-stopped
@@ -36,6 +36,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.prefect
+    exclude_from_hc: true
     depends_on:
       prefect-server:
         condition: service_healthy
@@ -54,9 +55,9 @@ services:
       GIT_COMMITTER_NAME: "Lightdash Sync"
       GIT_COMMITTER_EMAIL: "sync@data-platform"
     volumes:
-      - ~/data:/data
-      - ./dbt:/opt/prefect/dbt  # rw: sync flow writes downloaded content
-      - .:/repo                 # full repo root for git operations
+      - ${PIPELINES_DATA:-pipelines_data}:/data/pipelines
+      - ./dbt:/opt/prefect/dbt
+      - .:/repo
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - data-network
@@ -64,13 +65,14 @@ services:
 
   analytics-db:
     image: postgres:15
+    exclude_from_hc: true
     environment:
       POSTGRES_USER: ${ANALYTICS_DB_USER:-analytics}
       POSTGRES_PASSWORD: ${ANALYTICS_DB_PASSWORD:-changeme}
       POSTGRES_DB: ${ANALYTICS_DB_NAME:-analytics}
       ANALYTICS_DB_READONLY_PASSWORD: ${ANALYTICS_DB_READONLY_PASSWORD:-changeme_readonly}
     volumes:
-      - analytics_db_data:/var/lib/postgresql/data
+      - ${ANALYTICS_DB_DATA:-analytics_db_data}:/var/lib/postgresql/data
       - ./docker/analytics-db-init:/docker-entrypoint-initdb.d
     networks:
       - data-network
@@ -78,11 +80,12 @@ services:
 
   minio:
     image: minio/minio:latest
+    exclude_from_hc: true
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
     volumes:
-      - ~/data/minio:/data
+      - ${MINIO_DATA:-minio_data}:/data
     command: server /data --console-address ":9001"
     networks:
       - data-network
@@ -90,6 +93,7 @@ services:
 
   minio-init:
     image: minio/mc:latest
+    exclude_from_hc: true
     depends_on:
       - minio
     entrypoint: >
@@ -104,19 +108,20 @@ services:
 
   lightdash-db:
     image: postgres:15
+    exclude_from_hc: true
     environment:
       POSTGRES_USER: lightdash
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-prefect}
       POSTGRES_DB: lightdash
     volumes:
-      - lightdash_db_data:/var/lib/postgresql/data
+      - ${LIGHTDASH_DB_DATA:-lightdash_db_data}:/var/lib/postgresql/data
     networks:
       - data-network
     restart: unless-stopped
 
   lightdash:
-    image: lightdash/lightdash:0.2473.1   # pinned to match CLI version
-    platform: linux/amd64                 # amd64-only image, runs via Rosetta on Mac
+    image: lightdash/lightdash:0.2473.1
+    platform: linux/amd64
     depends_on:
       lightdash-db:
         condition: service_started
@@ -150,11 +155,12 @@ services:
       retries: 10
       start_period: 60s
 
-  # Runs dlt ingestion + dbt transformation on every deployment
+  # Runs dlt ingestion + dbt transformation on first boot
   pipeline-init:
     build:
       context: .
       dockerfile: docker/Dockerfile.prefect
+    exclude_from_hc: true
     depends_on:
       prefect-server:
         condition: service_healthy
@@ -169,23 +175,20 @@ services:
       ANALYTICS_DB_USER: ${ANALYTICS_DB_USER:-analytics}
       ANALYTICS_DB_PASSWORD: ${ANALYTICS_DB_PASSWORD}
     volumes:
-      - ~/data:/data
+      - ${PIPELINES_DATA:-pipelines_data}:/data
       - ./dbt:/opt/prefect/dbt:ro
     command: sh -c "python /opt/prefect/prefect/flows/main_pipeline.py || echo 'pipeline-init failed — check logs above'; exit 0"
     networks:
       - data-network
     restart: "no"
 
-  # One-time manual first-boot (free self-hosted Lightdash limitation):
-  #   1. Visit http://localhost:8080/register and create your admin account
-  #   2. Go to Settings → Personal Access Tokens → generate a token
-  #   3. Set LIGHTDASH_API_KEY in .env (local) or Coolify env vars (VPS)
-  #   4. Run: docker-compose up lightdash-deploy
-  # On subsequent deploys (e.g. after dbt model changes), just re-run step 4.
+  # One-time first-boot: registers Lightdash admin user, creates PAT, deploys dbt models.
+  # On subsequent deploys: re-runs lightdash deploy + upload to sync dbt/yml changes.
   lightdash-deploy:
     build:
       context: .
       dockerfile: docker/Dockerfile.lightdash-deploy
+    exclude_from_hc: true
     working_dir: /dbt
     depends_on:
       lightdash:
@@ -194,7 +197,6 @@ services:
       - ANALYTICS_DB_HOST=analytics-db
       - ANALYTICS_DB_PORT=5432
       - ANALYTICS_DB_NAME=${ANALYTICS_DB_NAME:-analytics}
-      # Readonly user: stored in Lightdash's DB and used by the web app for all queries
       - ANALYTICS_DB_USER=bi_readonly
       - ANALYTICS_DB_PASSWORD=${ANALYTICS_DB_READONLY_PASSWORD}
       - LIGHTDASH_URL=http://lightdash:8080
@@ -213,14 +215,13 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.vanna
+    exclude_from_hc: true
     environment:
       - ANALYTICS_DB_HOST=analytics-db
       - ANALYTICS_DB_PORT=5432
       - ANALYTICS_DB_NAME=${ANALYTICS_DB_NAME:-analytics}
-      # Readonly user: agent can only run SELECT queries
       - ANALYTICS_DB_USER=bi_readonly
       - ANALYTICS_DB_PASSWORD=${ANALYTICS_DB_READONLY_PASSWORD}
-      # Admin user: used only by scaffold_model() to run dbt DDL (CREATE TABLE)
       - ANALYTICS_DB_ADMIN_USER=${ANALYTICS_DB_USER:-analytics}
       - ANALYTICS_DB_ADMIN_PASSWORD=${ANALYTICS_DB_PASSWORD}
       - LIGHTDASH_PUBLIC_URL=${LIGHTDASH_PUBLIC_URL:-http://localhost:8080}
@@ -233,8 +234,8 @@ services:
       - VANNA_MODEL=${VANNA_MODEL:-deepseek-chat}
       - CHROMA_PATH=/data/vanna-chroma
     volumes:
-      - ~/data:/data
-      - ~/data/chroma-cache:/root/.cache/chroma
+      - ${VANNA_DATA:-vanna_data}:/data
+      - ${CHROMA_CACHE:-chroma_cache_data}:/root/.cache/chroma
       - ./dbt:/dbt
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
@@ -246,6 +247,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.vanna
+    exclude_from_hc: true
     depends_on:
       pipeline-init:
         condition: service_completed_successfully
@@ -258,8 +260,6 @@ services:
       - data-network
     restart: "no"
 
-  # nginx sits in front of Lightdash and injects the Vanna chat widget.
-  # Lightdash UI is accessed via http://localhost:8080 (nginx port).
   nginx:
     build:
       context: .
@@ -274,9 +274,13 @@ services:
     restart: unless-stopped
 
 volumes:
-  postgres_data:
-  lightdash_db_data:
+  prefect_db_data:
   analytics_db_data:
+  lightdash_db_data:
+  minio_data:
+  pipelines_data:
+  vanna_data:
+  chroma_cache_data:
 
 networks:
   data-network:
