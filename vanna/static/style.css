@@ -216,43 +216,48 @@ body {
   30%            { transform: translateY(-6px); }
 }
 
-/* ── Split input area ─────────────────────────────────── */
-.split-input {
-  display: flex;
-  border-top: 1px solid #ebebf0;
-  flex-shrink: 0;
-  min-height: 64px;
-}
-.split-pane {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  padding: 7px 10px 8px;
-}
-.split-pane + .split-pane {
-  border-left: 1px solid #ebebf0;
-}
-.split-label {
-  font-size: 10px;
-  font-weight: 700;
-  color: #27ae60;
-  text-transform: lowercase;
-  margin-bottom: 5px;
-  letter-spacing: 0.02em;
-}
-.split-controls {
+/* ── Mode toggle bar ──────────────────────────────────── */
+.mode-bar {
   display: flex;
   gap: 6px;
-  align-items: center;
+  padding: 8px 10px 6px;
+  border-top: 1px solid #ebebf0;
+  flex-shrink: 0;
+}
+.mode-btn {
   flex: 1;
+  padding: 7px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, opacity 0.15s;
+  border: 1.5px solid #7262ff;
+  background: none;
+  color: #7262ff;
+  white-space: nowrap;
+}
+.mode-btn.mode-active {
+  background: #7262ff;
+  color: #fff;
+}
+.mode-btn:disabled { opacity: 0.4; cursor: default; }
+.mode-btn:not(:disabled):not(.mode-active):hover { background: #f0eeff; }
+
+/* ── Input area ───────────────────────────────────────── */
+.input-area {
+  display: flex;
+  gap: 8px;
+  padding: 0 10px 10px;
+  flex-shrink: 0;
 }
 
 #user-input, #dpm-input {
   flex: 1;
-  padding: 7px 10px;
+  padding: 8px 11px;
   border: 1px solid #ddd;
   border-radius: 8px;
-  font-size: 12px;
+  font-size: 13px;
   outline: none;
   transition: border-color 0.15s;
   min-width: 0;
@@ -358,22 +363,6 @@ body.side-panel #chat-btn { display: none; }
 }
 #chat-btn svg { pointer-events: none; }
 
-/* ── Save Dashboard button ──────────────────────────── */
-#save-dashboard-btn {
-  background: #7262ff;
-  border: none;
-  color: #fff;
-  border-radius: 6px;
-  font-size: 11px;
-  padding: 6px 10px;
-  cursor: pointer;
-  font-weight: 600;
-  transition: opacity 0.12s;
-  width: 100%;
-  text-align: center;
-}
-#save-dashboard-btn:hover:not(:disabled) { opacity: 0.85; }
-#save-dashboard-btn:disabled { opacity: 0.45; cursor: default; }
 
 /* ── PRD card ───────────────────────────────────────── */
 .prd-card {

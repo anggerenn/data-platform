@@ -443,12 +443,25 @@ function renderResult(result) {
   return wrap;
 }
 
+// ── Mode switching ────────────────────────────────────
+
+function switchToDashboard() {
+  if (isDashboardMode) return;
+  startDashboard();
+}
+
+function switchToExplore() {
+  if (!isDashboardMode) return;
+  exitDashboardMode();
+}
+
 // ── Dashboard builder ─────────────────────────────────
 
 async function startDashboard() {
-  const btn = document.getElementById('save-dashboard-btn');
-  btn.disabled = true;
-  btn.textContent = 'Starting…';
+  const exploreBtn = document.getElementById('mode-explore-btn');
+  const dashBtn    = document.getElementById('mode-dashboard-btn');
+  dashBtn.disabled = true;
+  dashBtn.textContent = 'starting…';
   try {
     const resp = await fetch('dashboard/start', {
       method: 'POST',
@@ -459,18 +472,21 @@ async function startDashboard() {
     const data = await resp.json();
     dpmSessionId = data.dpm_session_id;
     isDashboardMode = true;
-    // Switch dashboard pane to DPM input
-    document.getElementById('dash-idle').style.display = 'none';
-    document.getElementById('dash-active').style.display = 'flex';
+    // Toggle buttons
+    exploreBtn.classList.remove('mode-active');
+    exploreBtn.textContent = 'back to exploration';
+    dashBtn.classList.add('mode-active');
+    dashBtn.textContent = 'dashboard mode';
+    dashBtn.disabled = false;
+    // Switch inputs
+    document.getElementById('explore-input-area').style.display = 'none';
+    document.getElementById('dpm-input-area').style.display = 'flex';
     document.getElementById('dpm-input').focus();
-    // Dim explore pane
-    document.getElementById('user-input').disabled = true;
-    document.getElementById('send-btn').disabled = true;
     appendDPMMessage(data.message);
     if (data.status === 'complete' && data.prd) { showPRD(data.prd); exitDashboardMode(); }
   } catch (e) {
-    btn.disabled = false;
-    btn.textContent = 'Save as Dashboard';
+    dashBtn.disabled = false;
+    dashBtn.textContent = 'save as dashboard';
     appendMessage('assistant', 'Could not start dashboard builder. Please try again.');
   }
 }
@@ -601,15 +617,17 @@ async function buildDashboard(btn, sessionId) {
 function exitDashboardMode() {
   isDashboardMode = false;
   dpmSessionId = null;
-  // Restore dashboard pane to idle
-  document.getElementById('dash-active').style.display = 'none';
-  document.getElementById('dash-idle').style.display = 'flex';
-  const btn = document.getElementById('save-dashboard-btn');
-  btn.textContent = 'Save as Dashboard';
-  btn.disabled = false;
-  // Re-enable explore pane
-  document.getElementById('user-input').disabled = false;
-  document.getElementById('send-btn').disabled = false;
+  // Restore toggle buttons
+  const exploreBtn = document.getElementById('mode-explore-btn');
+  const dashBtn    = document.getElementById('mode-dashboard-btn');
+  exploreBtn.classList.add('mode-active');
+  exploreBtn.textContent = 'exploration mode';
+  dashBtn.classList.remove('mode-active');
+  dashBtn.textContent = 'save as dashboard';
+  dashBtn.disabled = false;
+  // Switch inputs
+  document.getElementById('dpm-input-area').style.display = 'none';
+  document.getElementById('explore-input-area').style.display = 'flex';
   document.getElementById('user-input').focus();
 }
 
@@ -712,7 +730,7 @@ async function sendMessage() {
           });
 
           if (!isDashboardMode && event.intent === 'explore' && event.data && event.data.length > 0) {
-            document.getElementById('save-dashboard-btn').disabled = false;
+            document.getElementById('mode-dashboard-btn').disabled = false;
           }
 
           exchangeCount++;

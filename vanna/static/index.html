@@ -24,27 +24,20 @@
       </div>
     </div>
     <div id="messages"></div>
-    <div class="split-input">
-      <div class="split-pane" id="explore-pane">
-        <div class="split-label">exploration</div>
-        <div class="split-controls">
-          <input id="user-input" type="text" placeholder="Ask a question…"
-                 onkeydown="if(event.key==='Enter' && !event.shiftKey){ event.preventDefault(); sendMessage(); }">
-          <button id="send-btn" onclick="sendMessage()">Send</button>
-          <button id="stop-btn" onclick="stopRequest()">■ Stop</button>
-        </div>
-      </div>
-      <div class="split-pane" id="dashboard-pane">
-        <div class="split-label">dashboard</div>
-        <div class="split-controls" id="dash-idle">
-          <button id="save-dashboard-btn" onclick="startDashboard()" disabled title="Explore data first, then save as dashboard">Save as Dashboard</button>
-        </div>
-        <div class="split-controls" id="dash-active" style="display:none">
-          <input id="dpm-input" type="text" placeholder="Your answer…"
-                 onkeydown="if(event.key==='Enter' && !event.shiftKey){ event.preventDefault(); sendDPMInput(); }">
-          <button id="dpm-send-btn" onclick="sendDPMInput()">→</button>
-        </div>
-      </div>
+    <div class="mode-bar">
+      <button id="mode-explore-btn" class="mode-btn mode-active" onclick="switchToExplore()">exploration mode</button>
+      <button id="mode-dashboard-btn" class="mode-btn" onclick="switchToDashboard()" disabled>save as dashboard</button>
+    </div>
+    <div class="input-area" id="explore-input-area">
+      <input id="user-input" type="text" placeholder="Ask a question…"
+             onkeydown="if(event.key==='Enter' && !event.shiftKey){ event.preventDefault(); sendMessage(); }">
+      <button id="send-btn" onclick="sendMessage()">Send</button>
+      <button id="stop-btn" onclick="stopRequest()">■ Stop</button>
+    </div>
+    <div class="input-area" id="dpm-input-area" style="display:none">
+      <input id="dpm-input" type="text" placeholder="Your answer…"
+             onkeydown="if(event.key==='Enter' && !event.shiftKey){ event.preventDefault(); sendDPMInput(); }">
+      <button id="dpm-send-btn" onclick="sendDPMInput()">→</button>
     </div>
   </div>
 
