@@ -600,11 +600,21 @@ def _build_model_question(prd, grain_cols: list[str]) -> str:
     return ' '.join(parts)
 
 
-def _wrap_as_dbt_model(sql: str) -> str:
-    """Strip LIMIT, replace schema-qualified refs with dbt refs, add config header."""
+def _wrap_as_dbt_model(sql: str, model_name: str = '') -> str:
+    """Strip LIMIT, replace schema-qualified refs with dbt refs, add config header.
+
+    Handles 2-part (schema.table) and 3-part (db.schema.table) qualified names
+    for any table under transformed_staging or transformed_marts, excluding the
+    model being created (avoids circular self-references).
+    """
     sql = re.sub(r'\s*LIMIT\s+\d+\s*;?\s*$', '', sql.strip(), flags=re.IGNORECASE)
-    sql = re.sub(r'transformed_staging\.stg_orders', "{{ ref('stg_orders') }}", sql)
-    sql = re.sub(r'transformed_marts\.daily_sales', "{{ ref('daily_sales') }}", sql)
+    # Replace both 2-part and 3-part qualified refs under any transformed_* schema
+    def _to_ref(m: re.Match) -> str:
+        table = m.group(1)
+        if model_name and table == model_name:
+            return m.group(0)  # don't create a self-reference
+        return "{{ ref('" + table + "') }}"
+    sql = re.sub(r'(?:\w+\.)?transformed_\w+\.(\w+)', _to_ref, sql)
     return "{{ config(materialized='table') }}\n\n" + sql
 
 
@@ -647,7 +657,7 @@ def scaffold_model(prd, grain_cols: list[str], dbt_path: str, vn=None) -> tuple[
     else:
         return None, f"SQL validation failed after 3 attempts. Last error: {last_error}"
 
-    sql = _wrap_as_dbt_model(raw_sql)
+    sql = _wrap_as_dbt_model(raw_sql, model_name=model_name)
     os.makedirs(os.path.dirname(sql_path), exist_ok=True)
     with open(sql_path, 'w') as f:
         f.write(sql)

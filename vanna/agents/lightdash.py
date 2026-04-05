@@ -390,6 +390,7 @@ def _trigger_deploy(host_dbt_path: str, network: str) -> tuple[bool, str]:
             remove=True,
         )
         output = logs.decode('utf-8') if isinstance(logs, bytes) else str(logs)
+        print(f"[lightdash-deploy] output:\n{output[:2000]}")
         return True, output
     except Exception as e:
         return False, str(e)
