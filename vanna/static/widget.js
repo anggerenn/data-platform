@@ -10,7 +10,7 @@
 
   var style = document.createElement('style');
   style.textContent = [
-    'body{transition:margin-right ' + EASE + ';}',
+    'html{box-sizing:border-box;transition:padding-right ' + EASE + ';}',
 
     '#vanna-fab{',
       'position:fixed;bottom:24px;right:24px;',
@@ -81,14 +81,14 @@
   function openPanel() {
     open = true;
     panel.classList.add('open');
-    document.body.style.marginRight = PANEL_WIDTH;
+    document.documentElement.style.paddingRight = PANEL_WIDTH;
     fab.style.right = 'calc(' + PANEL_WIDTH + ' + 24px)';
   }
 
   function closePanel() {
     open = false;
     panel.classList.remove('open');
-    document.body.style.marginRight = '';
+    document.documentElement.style.paddingRight = '';
     fab.style.right = '';
   }
 
