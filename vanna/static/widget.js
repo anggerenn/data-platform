@@ -10,8 +10,6 @@
 
   var style = document.createElement('style');
   style.textContent = [
-    'html,body{box-sizing:border-box;}',
-    'body{transition:padding-right ' + EASE + ';}',
 
     '#vanna-fab{',
       'position:fixed;bottom:24px;right:24px;',
@@ -103,6 +101,22 @@
     }
   }
 
+  /* ── Main content area adjustment ───────────────────────────────── */
+  // Lightdash (Mantine AppShell) renders scrollable content inside <main>.
+  // Targeting it directly is more reliable than body/html padding tricks.
+  function getMainEl() {
+    return document.querySelector('main') ||
+           document.querySelector('[role="main"]') ||
+           document.querySelector('#root > div > div');
+  }
+
+  function shiftMain(shift) {
+    var el = getMainEl();
+    if (!el) return;
+    el.style.transition = 'margin-right ' + EASE;
+    el.style.marginRight = shift ? PANEL_WIDTH : '';
+  }
+
   /* ── Toggle logic ───────────────────────────────────────────────── */
   var open = false;
 
@@ -110,16 +124,16 @@
     open = true;
     collectFixedEls();
     panel.classList.add('open');
-    document.body.style.paddingRight = PANEL_WIDTH;
     shiftFixed(true);
+    shiftMain(true);
     fab.style.display = 'none';
   }
 
   function closePanel() {
     open = false;
     panel.classList.remove('open');
-    document.body.style.paddingRight = '';
     shiftFixed(false);
+    shiftMain(false);
     fab.style.display = '';
   }
 
