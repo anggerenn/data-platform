@@ -18,9 +18,20 @@ import docker
 from prefect import flow, task
 
 
-_LIGHTDASH_IMAGE = os.environ.get('LIGHTDASH_DEPLOY_IMAGE', 'data-platform-lightdash-deploy')
 _NETWORK = 'data-platform_data-network'
 _REPO_PATH = '/repo'
+
+
+def _find_lightdash_deploy_image(client):
+    """Return the first local image tag containing 'lightdash-deploy', or fall back to env var."""
+    override = os.environ.get('LIGHTDASH_DEPLOY_IMAGE')
+    if override:
+        return override
+    for img in client.images.list():
+        for tag in img.tags:
+            if 'lightdash-deploy' in tag:
+                return tag
+    return 'data-platform-lightdash-deploy'  # last-resort default
 
 
 @task(name="lightdash-download")
@@ -30,6 +41,8 @@ def download_lightdash_content():
     api_key       = os.environ.get('LIGHTDASH_API_KEY', '')
 
     client = docker.from_env()
+    image = _find_lightdash_deploy_image(client)
+    print(f"Using lightdash-deploy image: {image}")
 
     # Find the host path for ./dbt by inspecting this container's mounts
     hostname = os.environ.get('HOSTNAME', '')
@@ -49,7 +62,7 @@ def download_lightdash_content():
     print(f"Downloading from {lightdash_url} → {host_dbt_path}/lightdash/")
 
     logs = client.containers.run(
-        image=_LIGHTDASH_IMAGE,
+        image=image,
         command=(
             f'sh -c "'
             f'lightdash login {lightdash_url} --token {api_key} && '
