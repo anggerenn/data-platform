@@ -75,13 +75,42 @@
   ].join('');
   document.body.appendChild(panel);
 
+  /* ── Fixed-element adjustment ───────────────────────────────────── */
+  var fixedEls = [];
+
+  function collectFixedEls() {
+    fixedEls = [];
+    var all = document.querySelectorAll('body *');
+    for (var i = 0; i < all.length; i++) {
+      var el = all[i];
+      if (el.id === 'vanna-panel' || el.id === 'vanna-fab') continue;
+      if (window.getComputedStyle(el).position === 'fixed') {
+        fixedEls.push(el);
+      }
+    }
+  }
+
+  function shiftFixed(shift) {
+    for (var i = 0; i < fixedEls.length; i++) {
+      fixedEls[i].style.transition = 'right ' + EASE + ', width ' + EASE;
+      if (shift) {
+        var r = parseInt(window.getComputedStyle(fixedEls[i]).right) || 0;
+        fixedEls[i].style.right = (r + 420) + 'px';
+      } else {
+        fixedEls[i].style.right = '';
+      }
+    }
+  }
+
   /* ── Toggle logic ───────────────────────────────────────────────── */
   var open = false;
 
   function openPanel() {
     open = true;
+    collectFixedEls();
     panel.classList.add('open');
     document.documentElement.style.paddingRight = PANEL_WIDTH;
+    shiftFixed(true);
     fab.style.display = 'none';
   }
 
@@ -89,6 +118,7 @@
     open = false;
     panel.classList.remove('open');
     document.documentElement.style.paddingRight = '';
+    shiftFixed(false);
     fab.style.display = '';
   }
 
