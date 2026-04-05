@@ -65,9 +65,7 @@ services:
     restart: unless-stopped
 
   analytics-db:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.analytics-db
+    image: postgres:15
     environment:
       POSTGRES_USER: ${ANALYTICS_DB_USER:-analytics}
       POSTGRES_PASSWORD: ${ANALYTICS_DB_PASSWORD:-changeme}
