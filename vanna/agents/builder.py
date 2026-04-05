@@ -560,6 +560,7 @@ def _write_schema_file(
         }],
     }
     schema_path = os.path.join(dbt_path, 'models', 'marts', f'{model_name}.yml')
+    os.makedirs(os.path.dirname(schema_path), exist_ok=True)
     with open(schema_path, 'w') as f:
         yaml.dump(schema_doc, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
@@ -647,6 +648,7 @@ def scaffold_model(prd, grain_cols: list[str], dbt_path: str, vn=None) -> tuple[
         return None, f"SQL validation failed after 3 attempts. Last error: {last_error}"
 
     sql = _wrap_as_dbt_model(raw_sql)
+    os.makedirs(os.path.dirname(sql_path), exist_ok=True)
     with open(sql_path, 'w') as f:
         f.write(sql)
 
