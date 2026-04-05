@@ -340,6 +340,7 @@ def dashboard_build():
                 prd, model_result.required_grain, _DBT_PATH, vn=vn
             )
             if scaffold_error:
+                print(f"[dashboard/build] scaffold_model error: {scaffold_error}")
                 return jsonify({
                     "error": f"Could not scaffold new model: {scaffold_error}",
                     "uncovered_metrics": model_result.uncovered_metrics,
@@ -414,6 +415,7 @@ def dashboard_build():
 
         return jsonify({**model_result.model_dump(), **dashboard_result, **housekeeper_info, 'guide': guide_info})
     except Exception as e:
+        import traceback; traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 

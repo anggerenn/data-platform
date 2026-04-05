@@ -560,11 +560,12 @@ async function buildDashboard(btn, sessionId) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ dpm_session_id: sessionId }),
     });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
 
-    if (data.error) {
-      btn.textContent = `Error: ${data.error}`;
+    if (!resp.ok || data.error) {
+      btn.disabled = false;
+      btn.textContent = 'Build Dashboard';
+      appendMessage('assistant', `Build failed: ${data.error || 'HTTP ' + resp.status}`);
       return;
     }
     if (data.needs_new_model) {
