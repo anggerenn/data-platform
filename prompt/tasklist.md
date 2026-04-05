@@ -175,15 +175,26 @@ Replace with BM25 (rank-bm25) — no embedding model needed, ~60MB target.
 
 ---
 
-## Up Next — VPS Deployment
+## Completed — VPS Deployment (session 14, 2026-04-05)
 
 ### Deploy to Coolify
-- [ ] Push all changes to git (main branch)
-- [ ] Redeploy vanna + analytics-db + lightdash services via Coolify (ClickHouse removed — now PostgreSQL)
-- [ ] Re-run `lightdash-deploy` on VPS
-- [ ] Set `LIGHTDASH_API_KEY`, `GEMINI_API_KEY`, `ANALYTICS_DB_*` in Coolify env vars
-- [ ] Mount `/var/run/docker.sock` in Vanna container via Coolify volume config
-- [ ] Smoke test all services on VPS URLs
+- [x] Push all changes to git (main branch)
+- [x] Redeploy vanna + analytics-db + lightdash services via Coolify (ClickHouse removed — now PostgreSQL)
+- [x] Re-run `lightdash-deploy` on VPS
+- [x] Set `LIGHTDASH_API_KEY`, `GEMINI_API_KEY`, `ANALYTICS_DB_*` in Coolify env vars
+- [x] Mount `/var/run/docker.sock` in Vanna container via Coolify volume config
+- [x] Smoke test all services on VPS URLs
+
+### Session 14 production fixes applied
+- [x] `profiles.yml` directory corruption fixed — removed separate bind mount from `_trigger_deploy`, added defensive CMD in `Dockerfile.vanna`
+- [x] `_wrap_as_dbt_model` handles 3-part qualified table refs (schema.transformed_*.)
+- [x] `_write_schema_file` emits `sum` metric for numeric CASE columns
+- [x] `bi_readonly` password uses `ANALYTICS_DB_READONLY_PASSWORD` in `_trigger_deploy`
+- [x] Admin credentials passed to programmatic lightdash-deploy container
+- [x] Deploy output logged for diagnostics
+- [x] Traefik `vanna-timeouts.yaml` created on VPS — gateway timeout fixed
+- [x] Duplicate churn dashboard YAMLs + Lightdash objects cleaned up
+- [x] E2E churn dashboard build verified end-to-end on VPS ✓
 
 ---
 

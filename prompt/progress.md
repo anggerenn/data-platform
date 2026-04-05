@@ -1,5 +1,65 @@
 # Project Progress
 
+## Session 14 — VPS Deployment Debugging + E2E Fixes (2026-04-05)
+
+### Context
+Full VPS deployment debug session. Deployed all code from sessions 11–13, then diagnosed and fixed a cascade of real production failures via SSH.
+
+### Fix 1 — `profiles.yml` directory corruption (`lightdash.py` + `Dockerfile.vanna`)
+- **Root cause:** `_trigger_deploy` in `lightdash.py` had a second bind mount: `f"{host_dbt_path}/profiles.yml": {'bind': '/root/.dbt/profiles.yml', 'mode': 'ro'}`. When Coolify first deploys, the host path `./dbt/profiles.yml` doesn't exist as a FILE — Docker silently creates it as an empty DIRECTORY. This caused `dbt ls` to fail with "Could not find profile named 'default'" on every programmatic deploy. `--ignore-errors` on `lightdash deploy` swallowed it, so the model was never registered as an explore in Lightdash.
+- **Symptom:** `Explore "customer_churn_risk" does not exist` when chart tile loaded in Lightdash UI.
+- **Fix (lightdash.py):** Removed the `profiles.yml` separate bind mount from `_trigger_deploy`. The baked `profiles.yml` inside the container is copied to `/root/.dbt/profiles.yml` at image build time — no separate mount needed.
+- **Fix (Dockerfile.vanna):** Added defensive CMD: `[ -d /dbt/profiles.yml ] && rm -rf /dbt/profiles.yml` — removes any corrupted directory before seeding dbt files from baked copy.
+- **Manual VPS repair:** `rm -rf /data/coolify/.../dbt/profiles.yml && docker cp vanna:/dbt-baked/profiles.yml /data/coolify/.../dbt/profiles.yml`
+
+### Fix 2 — `_wrap_as_dbt_model` 3-part qualified table refs (`builder.py`)
+- CASE: scaffolded SQL contained `transformed_marts.customer_churn_risk_revenue` (2-part) and CTEs referencing `analytics.transformed_marts.customer_churn_risk_revenue` (3-part). The regex only handled 2-part refs.
+- Fixed with: `re.sub(r'(?:\w+\.)?transformed_\w+\.(\w+)', _to_ref, sql)` — optional schema prefix before `transformed_`.
+
+### Fix 3 — `_write_schema_file` CASE column metric generation (`builder.py`)
+- **Root cause:** `churned_customer_count` was a `CASE ... THEN 1 ELSE 0 END` expression. `_infer_metric_type()` returns `None` for CASE → classified as string dimension with no `_sum` metric. Chart planner matched `_NUM_RE.search('churned_customer_count')` and assumed `_sum` metric existed → broken field ID in Lightdash.
+- **Fix:** In the `elif expr and not is_plain_ref:` branch, when `_NUM_COL_RE.search(col)` is True, emit a `sum` metric entry in `meta`. Dimension type forced to `number`.
+
+### Fix 4 — `bi_readonly` password mismatch in `_trigger_deploy` (`lightdash.py`)
+- `_trigger_deploy` was passing `ANALYTICS_DB_PASSWORD` (admin password: `mechange`) as `bi_readonly`'s password. On Coolify these are different env vars.
+- Fixed: `os.environ.get('ANALYTICS_DB_READONLY_PASSWORD') or os.environ.get('ANALYTICS_DB_PASSWORD', '')`
+
+### Fix 5 — Admin credentials in `_trigger_deploy` (`lightdash.py`)
+- `ANALYTICS_DB_ADMIN_USER` and `ANALYTICS_DB_ADMIN_PASSWORD` were not being passed to the programmatic lightdash-deploy container.
+- Added both to the env dict so `dbt run --target scaffold` inside the container has write access.
+
+### Fix 6 — Deploy output logged for diagnostics (`lightdash.py`)
+- Added `print(f"[lightdash-deploy] output:\n{output[:2000]}")` after container run so deploy failures are visible in vanna logs without SSH.
+
+### Fix 7 — Traefik gateway timeout (`/data/coolify/proxy/dynamic/vanna-timeouts.yaml`)
+- Dashboard build takes 2–3 min. Traefik v3.6.1 had no explicit `responseHeaderTimeout`, which may have been 60s.
+- Created `/data/coolify/proxy/dynamic/vanna-timeouts.yaml` on VPS:
+  ```yaml
+  http:
+    serversTransports:
+      default:
+        forwardingTimeouts:
+          responseHeaderTimeout: 0s
+          dialTimeout: 30s
+          idleConnTimeout: 300s
+  ```
+- Traefik auto-reloads dynamic config — no restart needed.
+
+### Cleanup
+- Removed 5 duplicate churn dashboard YAML files from VPS (`dbt/lightdash/dashboards/` and `dbt/lightdash/prd/`)
+- Deleted corresponding Lightdash dashboard objects via Lightdash API
+- VPS `lightdash/prd/` files confirmed as source of truth (Prefect sync flow pushes them to git)
+
+### E2E Result (fresh test after all fixes)
+- New session, answered all 6 DPM questions including metric definitions (Q5)
+- `/dashboard/build` triggered → no gateway timeout
+- `profiles.yml` read correctly → `lightdash deploy` succeeded (3 explores, SUCCESS=3)
+- `customer_churn_risk` model registered → explore exists
+- 5 chart tiles rendered without "unknown field" errors
+- Dashboard URL returned in widget ✓
+
+---
+
 ## Session 13 — Schema Quality + Chart Fixes (2026-04-04)
 
 ### Fixes
