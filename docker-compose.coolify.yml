@@ -1,5 +1,5 @@
-# Coolify-specific overrides — not valid Docker Compose spec.
-# Applied via Coolify's compose merge, never used locally.
+# Coolify-specific overrides — applied via Coolify's compose merge, never used locally.
+# exclude_from_hc is a Coolify extension not valid in standard Docker Compose spec.
 services:
   postgres:
     exclude_from_hc: true
