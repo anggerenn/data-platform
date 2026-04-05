@@ -15,9 +15,11 @@ RUN pip install --no-cache-dir \
 
 COPY vanna/ .
 COPY dbt/ /dbt-baked/
+# Put profiles.yml in dbt's standard home so it's always found regardless of --profiles-dir
+RUN mkdir -p /root/.dbt && cp /dbt-baked/profiles.yml /root/.dbt/profiles.yml
 
 EXPOSE 8084
 
 # If the /dbt bind mount is empty (no dbt_project.yml), seed it from the baked copy.
 # This handles Coolify deployments where ./dbt resolves to a fresh empty host directory.
-CMD ["sh", "-c", "[ -f /dbt/dbt_project.yml ] || cp -rn /dbt-baked/. /dbt/ ; rm -rf /data/vanna-chroma/* && python train.py && python app.py"]
+CMD ["sh", "-c", "[ -f /dbt/dbt_project.yml ] || cp -a /dbt-baked/. /dbt/ ; rm -rf /data/vanna-chroma/* && python train.py && python app.py"]
