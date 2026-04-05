@@ -20,6 +20,8 @@ Rules:
 - Use ROUND((expr)::NUMERIC, 2) to round — cast the ENTIRE expression to NUMERIC before ROUND; PostgreSQL ROUND(double precision, int) is not supported
 - GROUP BY must use column expressions, not aliases
 - Schemas: raw (source), transformed_staging (views), transformed_marts (tables)
+- The ONLY tables that exist are: transformed_marts.daily_sales and transformed_staging.stg_orders
+- NEVER invent table names — do NOT use transformed_marts.orders, transformed_staging.orders, or any other table not listed above
 - For date filters use ISO string literals directly: WHERE order_date >= '2026-03-01'
 - NEVER use ClickHouse functions: toDate(), today(), toStartOfMonth(), toYYYYMM(), toMonth(), toDayOfMonth()
 - Return ONLY the SQL query — no explanation, no markdown code fences"""
