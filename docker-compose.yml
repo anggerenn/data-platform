@@ -172,7 +172,6 @@ services:
       DBT_PROJECT_DIR: /opt/prefect/dbt
     volumes:
       - ${PIPELINES_DATA:-pipelines_data}:/data
-      - ./dbt:/opt/prefect/dbt:ro
     command: sh -c "python /opt/prefect/prefect/flows/main_pipeline.py || echo 'pipeline-init failed — check logs above'; exit 0"
     networks:
       - data-network
