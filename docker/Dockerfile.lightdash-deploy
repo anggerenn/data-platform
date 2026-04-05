@@ -15,6 +15,9 @@ RUN pip install --no-cache-dir dbt-postgres
 # Cap Node memory during install to avoid OOM on low-RAM VPS
 RUN NODE_OPTIONS="--max-old-space-size=512" npm install -g @lightdash/cli@0.2473.1
 
+# Copy dbt project so Coolify bind mounts are not required
+COPY dbt/ /dbt/
+
 # Copy and set entrypoint script
 COPY docker/lightdash-deploy-entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

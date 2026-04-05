@@ -198,9 +198,6 @@ services:
       - LIGHTDASH_PASSWORD=${LIGHTDASH_PASSWORD}
       - LIGHTDASH_API_KEY=${LIGHTDASH_API_KEY}
       - CI=true
-    volumes:
-      - ./dbt:/dbt
-      - ./dbt/profiles.yml:/root/.dbt/profiles.yml
     networks:
       - data-network
     restart: "no"
