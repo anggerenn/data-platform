@@ -503,8 +503,10 @@ def _write_schema_file(
 
         elif expr and not is_plain_ref:
             # SQL parsing ran on a real expression and returned None → confirmed dimension (e.g. CASE)
-            dim_type = 'date' if col.endswith('_date') else 'string'
-            entry['meta'] = {
+            # If the column name also looks numeric (e.g. churned_customer_count = CASE...0/1),
+            # expose a sum metric too so chart planners can reference it.
+            dim_type = 'date' if col.endswith('_date') else ('number' if _NUM_COL_RE.search(col) else 'string')
+            meta: dict = {
                 'dimension': {
                     'type': dim_type,
                     'label': label,
@@ -512,6 +514,17 @@ def _write_schema_file(
                     'groups': ['Dimensions'],
                 }
             }
+            if _NUM_COL_RE.search(col) and not is_id_col:
+                meta['metrics'] = {
+                    f'{col}_sum': {
+                        'type': 'sum',
+                        'label': label,
+                        'description': label,
+                        'groups': ['Metrics'],
+                        'round': 2,
+                    }
+                }
+            entry['meta'] = meta
 
         else:
             # No SQL info (plain ref or CTE alias) — fall back to column-name heuristics

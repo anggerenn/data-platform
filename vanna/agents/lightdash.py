@@ -367,7 +367,7 @@ def _trigger_deploy(host_dbt_path: str, network: str) -> tuple[bool, str]:
             'ANALYTICS_DB_PORT': os.environ.get('ANALYTICS_DB_PORT', '5432'),
             'ANALYTICS_DB_NAME': os.environ.get('ANALYTICS_DB_NAME', 'analytics'),
             'ANALYTICS_DB_USER': 'bi_readonly',
-            'ANALYTICS_DB_PASSWORD': os.environ.get('ANALYTICS_DB_PASSWORD', ''),
+            'ANALYTICS_DB_PASSWORD': os.environ.get('ANALYTICS_DB_READONLY_PASSWORD') or os.environ.get('ANALYTICS_DB_PASSWORD', ''),
             'ANALYTICS_DB_ADMIN_USER': os.environ.get('ANALYTICS_DB_ADMIN_USER', ''),
             'ANALYTICS_DB_ADMIN_PASSWORD': os.environ.get('ANALYTICS_DB_ADMIN_PASSWORD', ''),
             'LIGHTDASH_URL': 'http://lightdash:8080',
