@@ -18,6 +18,6 @@ def run_dbt():
         print(result.stdout)
         if result.returncode != 0:
             print(result.stderr)
-            raise Exception(f"{cmd[1]} failed: {result.stderr}")
+            raise Exception(f"{cmd[1]} failed:\nSTDOUT: {result.stdout}\nSTDERR: {result.stderr}")
     print("dbt run complete + docs generate complete")
     return True
