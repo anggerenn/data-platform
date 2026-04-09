@@ -210,8 +210,8 @@ def find_best_model(
     def grain_covers(model: dict) -> bool:
         if not grain_set:
             return True
-        model_grain = {g.lower() for g in model.get('grain', [])}
-        return grain_set.issubset(model_grain)
+        col_set = {c.lower() for c in model['columns']}
+        return grain_set.issubset(col_set)
 
     covering = [m for m in models if grain_covers(m)]
 
@@ -241,7 +241,6 @@ def find_best_model(
 
 # ── Model scaffolding ──────────────────────────────────────────────────────────
 
-_AVAILABLE_GRAIN_COLS = {'customer_id', 'city', 'category', 'order_date'}
 
 _NUM_COL_RE = re.compile(
     r'(count|amount|revenue|total|sum|avg|average|quantity|units|value|rate|pct|percent)',
@@ -264,48 +263,6 @@ def _model_name_from_prd(prd) -> str:
     filtered = [w for w in words if w not in stops][:4]
     return '_'.join(filtered) if filtered else 'custom_model'
 
-
-def _generate_model_sql(grain_cols: list[str]) -> str:
-    """
-    Build deterministic template SQL for a new dbt model from stg_orders.
-
-    grain_cols: the GROUP BY columns resolved from the PRD
-    (subset of {customer_id, city, category, order_date}).
-    """
-    dim_cols = [c for c in grain_cols if c in _AVAILABLE_GRAIN_COLS]
-
-    aggs: list[str] = []
-    if 'customer_id' not in dim_cols:
-        # Not customer-level — include distinct customer count as a metric
-        aggs.append("    COUNT(DISTINCT customer_id)                                  AS customer_count")
-    aggs += [
-        "    COUNT(DISTINCT order_id)                                     AS order_count",
-        "    SUM(amount * quantity)                                        AS total_revenue",
-        "    SUM(amount)                                                   AS revenue",
-        "    SUM(quantity)                                                 AS units_sold",
-        "    SUM(amount * quantity) / NULLIF(COUNT(DISTINCT order_id), 0) AS average_order_value",
-    ]
-    if 'customer_id' in dim_cols:
-        # Customer-level grain → add lifecycle and type columns
-        aggs += [
-            "    MIN(order_date)                                               AS first_order_date",
-            "    MAX(order_date)                                               AS last_order_date",
-            "    CASE WHEN MAX(order_date) >= CURRENT_DATE - INTERVAL '30 days'",
-            "         THEN 'active' ELSE 'inactive' END                        AS customer_type",
-        ]
-
-    dim_select = ',\n'.join(f'    {c}' for c in dim_cols)
-    agg_select = ',\n'.join(aggs)
-    group_by = ', '.join(str(i + 1) for i in range(len(dim_cols)))
-
-    parts = ["{{ config(materialized='table') }}", "", "SELECT"]
-    if dim_cols:
-        parts.append(dim_select + ',')
-    parts.append(agg_select)
-    parts.append("FROM {{ ref('stg_orders') }}")
-    if dim_cols:
-        parts.append(f"GROUP BY {group_by}")
-    return '\n'.join(parts) + '\n'
 
 
 def _get_model_columns_from_db(model_name: str) -> list[str]:
@@ -613,12 +570,23 @@ def _build_model_question(prd, grain_cols: list[str]) -> str:
     return ' '.join(parts)
 
 
+def _source_table_for_sql(sql: str) -> str:
+    """Return the appropriate source table name based on columns referenced in the SQL."""
+    if re.search(r'\bcustomer_id\b', sql, re.IGNORECASE):
+        return 'stg_orders'
+    return 'daily_sales'
+
+
+_BARE_REF_RE = re.compile(r'\b(stg_\w+|raw_\w+)\b')
+
+
 def _wrap_as_dbt_model(sql: str, model_name: str = '') -> str:
     """Strip LIMIT, replace schema-qualified refs with dbt refs, add config header.
 
     Handles 2-part (schema.table) and 3-part (db.schema.table) qualified names
     for any table under transformed_staging or transformed_marts, excluding the
     model being created (avoids circular self-references).
+    Also converts bare stg_* / raw_* table names not already schema-qualified.
     """
     sql = re.sub(r'\s*LIMIT\s+\d+\s*;?\s*$', '', sql.strip(), flags=re.IGNORECASE)
     # Replace both 2-part and 3-part qualified refs under any transformed_* schema
@@ -628,6 +596,13 @@ def _wrap_as_dbt_model(sql: str, model_name: str = '') -> str:
             return m.group(0)  # don't create a self-reference
         return "{{ ref('" + table + "') }}"
     sql = re.sub(r'(?:\w+\.)?transformed_\w+\.(\w+)', _to_ref, sql)
+    # Catch bare stg_* / raw_* refs not already converted (no schema prefix)
+    def _bare_to_ref(m: re.Match) -> str:
+        table = m.group(1)
+        if model_name and table == model_name:
+            return m.group(0)
+        return "{{ ref('" + table + "') }}"
+    sql = _BARE_REF_RE.sub(_bare_to_ref, sql)
     return "{{ config(materialized='table') }}\n\n" + sql
 
 
@@ -669,6 +644,28 @@ def scaffold_model(prd, grain_cols: list[str], dbt_path: str, vn=None) -> tuple[
             break
     else:
         return None, f"SQL validation failed after 3 attempts. Last error: {last_error}"
+
+    # If SQL references customer_id but FROM clause doesn't use stg_orders, regenerate
+    # with an explicit source table hint so Vanna doesn't pick the pre-aggregated daily_sales.
+    expected_source = _source_table_for_sql(raw_sql)
+    if expected_source == 'stg_orders' and not re.search(r'\bstg_orders\b', raw_sql, re.IGNORECASE):
+        corrected_question = (
+            f"{base_question}\n\nIMPORTANT: You must SELECT FROM stg_orders (not daily_sales) "
+            "because the query requires customer_id which is only available at order-level grain."
+        )
+        for attempt in range(3):
+            question = corrected_question if attempt == 0 else (
+                f"{corrected_question}\n\nPrevious attempt failed: {last_error}. Fix the SQL."
+            )
+            try:
+                raw_sql = vn.generate_sql(question)
+            except Exception as exc:
+                return None, f"SQL generation failed: {exc}"
+            last_error = _validate_sql(raw_sql)
+            if last_error is None:
+                break
+        else:
+            return None, f"SQL validation failed after source correction. Last error: {last_error}"
 
     sql = _wrap_as_dbt_model(raw_sql, model_name=model_name)
     os.makedirs(os.path.dirname(sql_path), exist_ok=True)

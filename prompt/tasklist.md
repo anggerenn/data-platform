@@ -336,27 +336,10 @@ Root cause of wrong queries: LLM picks between `revenue`, `amount`, `line_total`
 - [x] Fixed: switched export from form POST to fetch+blob (encoding corruption); strip trailing LIMIT in /export backend
 
 ### Data Modeler — grain-aware model selection
-- [x] Partial fix: _needs_customer_grain() restricts candidates to models with customer_id when PRD mentions customer-level grain
-- [ ] **Backlog — proper fix:** declare grain + relationships in `meta` block, use them for model selection
-  - **Step 1:** add `meta.grain` and `meta.relationships` to all models in `schema.yml`:
-    ```yaml
-    - name: daily_sales
-      meta:
-        canonical: true
-        grain: [order_date, category, city]
-        relationships:
-          - to: stg_orders
-            type: many_to_one
-            join_on: [order_date, category, city]
-    - name: stg_orders
-      meta:
-        canonical: false
-        grain: [order_id]
-    ```
-  - **Step 2:** update `validate_schema.py` to enforce `meta.grain` is declared on all models
-  - **Step 3:** update `find_best_model()` in `builder.py` — pick coarsest model whose `meta.grain` ⊇ required PRD dimensions; fall back to lowest-grain (staging) only when no summary table covers it
-  - **Step 4:** remove `_needs_customer_grain()` hardcoded approach
-  - Why `meta` and not MetricFlow entities: avoids a second semantic layer alongside Lightdash `meta.metrics`; already the convention in this project; machine-readable by existing tooling (`builder.py`, `validate_schema.py`, `train_from_schema.py`)
+- [x] `meta.grain` + `meta.relationships` declared on all models in `schema.yml`
+- [x] `validate_schema.py` enforces `meta.grain` on all models with clear error messages
+- [x] `find_best_model()` uses `meta.grain` superset check — picks coarsest covering model
+- [x] `_needs_customer_grain()` removed — replaced by `_GRAIN_SIGNALS` keyword inference + `_HARD_GRAIN_SIGNALS` hard check
 
 ### Instructor — update README when dashboard is enriched with new narrative
 - [x] merge_guides() merges existing + new PRD; update_readme_tile() updates YAML + redeploys; wired in app.py on partial_uncovered
