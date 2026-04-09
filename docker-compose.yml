@@ -232,6 +232,8 @@ services:
       - ${CHROMA_CACHE:-chroma_cache_data}:/root/.cache/chroma
       - ./dbt:/dbt
       - /var/run/docker.sock:/var/run/docker.sock
+    expose:
+      - "8084"
     networks:
       - data-network
     restart: unless-stopped
