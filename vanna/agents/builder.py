@@ -119,6 +119,9 @@ def _scan_models(dbt_path: str) -> list[dict]:
 
 # ── Grain inference ────────────────────────────────────────────────────────────
 
+_DIRECT_GRAIN_COLS = {'customer_id', 'city', 'category', 'order_date', 'order_id'}
+
+
 def _infer_grain_from_prd(prd) -> list[str]:
     """
     Parse PRD metrics and dimensions to determine the minimum required grain.
@@ -131,6 +134,12 @@ def _infer_grain_from_prd(prd) -> list[str]:
     words = set(re.findall(r'\w+', all_text.lower()))
     for word, col in _GRAIN_SIGNALS.items():
         if word in words:
+            grain.add(col)
+    # Directly include dimension values that name grain columns — e.g. 'customer_id'
+    # won't match the keyword 'customer' via re.findall since underscore joins the tokens.
+    for dim in getattr(prd, 'dimensions', []):
+        col = dim.lower().strip()
+        if col in _DIRECT_GRAIN_COLS:
             grain.add(col)
     return sorted(grain)
 
