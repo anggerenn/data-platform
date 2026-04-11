@@ -54,7 +54,11 @@
   // Embedded mode: when loaded inside the Lightdash widget panel (?embedded=1)
   // auto-open the chat and hide the toggle button + expand button.
   if (new URLSearchParams(window.location.search).get('embedded') === '1') {
-    document.getElementById('chat-panel').classList.add('open');
+    var cp = document.getElementById('chat-panel');
+    cp.classList.add('open');
+    // Use inline styles for certainty — don't rely on CSS class cascade
+    cp.style.cssText = 'display:flex!important;position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;border-radius:0;margin:0;box-shadow:none;';
+    document.querySelector('.panel-header').style.display = 'none';
     document.getElementById('chat-btn').style.display = 'none';
     document.getElementById('expand-btn').style.display = 'none';
     document.getElementById('close-btn').style.display = 'none';
