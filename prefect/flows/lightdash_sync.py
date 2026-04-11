@@ -36,10 +36,7 @@ def _detect_network(client):
 
 
 def _find_lightdash_deploy_image(client):
-    """Find the lightdash-deploy image via env var, container name, or image tag."""
-    override = os.environ.get('LIGHTDASH_DEPLOY_IMAGE')
-    if override:
-        return override
+    """Find the lightdash-deploy image dynamically via container name or image tag."""
     # Most reliable on Coolify: read the image reference from the container config
     for container in client.containers.list(all=True):
         if 'lightdash-deploy' in container.name:
