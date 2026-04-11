@@ -164,6 +164,7 @@ def chat_stream():
                     'columns': columns,
                     'row_count': deps.result_total_count,
                     'chart_spec': chart_spec,
+                    'date_range': deps.result_date_range or None,
                     'session_id': session_id,
                 }
                 q.put(('output', result_data, new_msgs))
@@ -230,6 +231,7 @@ def chat():
         else:
             output['chart_spec'] = None
 
+        output['date_range'] = deps.result_date_range or None
         return jsonify({**output, "session_id": session_id})
     except Exception as e:
         sessions.setdefault(session_id, [])  # register session even on failure

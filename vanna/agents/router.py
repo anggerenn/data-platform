@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass, field
 from typing import Literal, Optional
 
@@ -26,6 +27,8 @@ class AgentDeps:
     result_total_count: int = 0
     # Computed summary stats — passed to answer_semantic, never raw rows
     result_summary: str = ""
+    # Date range detected from result columns — surfaced to user and answer_semantic
+    result_date_range: dict = field(default_factory=dict)
 
 
 def _summarise_rows(rows: list[dict], columns: list[str]) -> str:
@@ -60,6 +63,33 @@ def _summarise_rows(rows: list[dict], columns: list[str]) -> str:
     return "\n".join(lines)
 
 
+_DATE_COL_RE = re.compile(r'date|month|year|period|time', re.I)
+_ISO_DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}')
+
+
+def _detect_date_range(rows: list[dict], columns: list[str]) -> dict:
+    """Find a date column and return its min/max as {from, to, column}.
+
+    Checks column name first (must contain date/month/year/period/time),
+    then verifies values look like ISO date strings (YYYY-MM-DD prefix).
+    Returns {} if no date column is found.
+    """
+    for col in columns:
+        if not _DATE_COL_RE.search(col):
+            continue
+        values = [str(r[col]) for r in rows if r.get(col) is not None]
+        if not values:
+            continue
+        if all(_ISO_DATE_RE.match(v) for v in values):
+            sorted_vals = sorted(values)
+            return {
+                "from": sorted_vals[0][:10],
+                "to": sorted_vals[-1][:10],
+                "column": col,
+            }
+    return {}
+
+
 agent = Agent(
     model=make_model(),
     model_settings={"max_tokens": 8192},
@@ -92,11 +122,17 @@ async def explore_data(ctx: RunContext[AgentDeps], question: str) -> dict:
     df = ctx.deps.vanna.run_sql(sql)
     rows = df.head(20).to_dict(orient='records')
     # Store rows in deps — they never enter LLM context
+    cols = list(df.columns)
     ctx.deps.result_rows = rows
-    ctx.deps.result_columns = list(df.columns)
+    ctx.deps.result_columns = cols
     ctx.deps.result_total_count = len(df)
-    ctx.deps.result_summary = _summarise_rows(rows, list(df.columns))
-    return {"sql": sql, "row_count": len(df), "columns": list(df.columns)}
+    ctx.deps.result_date_range = _detect_date_range(rows, cols)
+    summary = _summarise_rows(rows, cols)
+    if ctx.deps.result_date_range:
+        dr = ctx.deps.result_date_range
+        summary = f"Date range: {dr['from']} to {dr['to']} (column: {dr['column']})\n" + summary
+    ctx.deps.result_summary = summary
+    return {"sql": sql, "row_count": len(df), "columns": cols}
 
 
 @agent.tool

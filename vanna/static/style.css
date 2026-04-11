@@ -149,6 +149,13 @@ body {
   color: #999;
 }
 
+.date-range {
+  margin-top: 3px;
+  font-size: 11px;
+  color: #aaa;
+  font-style: italic;
+}
+
 /* ── Chart ────────────────────────────────────────────── */
 .chart-wrap {
   margin-top: 8px;

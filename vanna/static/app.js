@@ -377,6 +377,13 @@ function renderResult(result) {
       : `${result.row_count} row${result.row_count !== 1 ? 's' : ''}`;
     wrap.appendChild(countEl);
 
+    if (result.date_range && result.date_range.from && result.date_range.to) {
+      const drEl = document.createElement('div');
+      drEl.className = 'date-range';
+      drEl.textContent = `Data from ${result.date_range.from} → ${result.date_range.to}`;
+      wrap.appendChild(drEl);
+    }
+
     const csvBtn = document.createElement('button');
     csvBtn.className = 'csv-btn';
     csvBtn.textContent = '⬇ Export CSV';
