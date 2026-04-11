@@ -1,5 +1,50 @@
 # Project Progress
 
+## Session 15 — Model Selection Refactor + VPS Testing (2026-04-10)
+
+### Context
+Live testing session against `vanna.baroqafarm.com` + `lightdash.baroqafarm.com`. Found and fixed several gaps in the model selection logic discovered through real end-to-end dashboard builds.
+
+### Fix 1 — `grain_covers` wrong — checked `meta.grain` not physical columns (`builder.py`)
+- **Root cause:** `grain_covers()` checked `model.meta.grain` (which is the primary key definition, e.g. `[order_id]`) instead of physical columns. `stg_orders` has `meta.grain = [order_id]` but `customer_id` is a physical column — so customer-level requirements always failed the grain check. Both models fell to the fallback keyword score where `daily_sales` won due to canonical bonus.
+- **Fix:** `grain_covers()` now checks `model['columns']` — if required grain columns exist as physical columns, the model passes.
+
+### Fix 2 — Grain inference missed compound column names (`builder.py`)
+- **Root cause:** `_infer_grain_from_prd()` uses `re.findall(r'\w+', text)` which treats `customer_id` as one token. Keyword `'customer'` never matched it. DPM populates `prd.dimensions = ['customer_id', 'city']` — but `customer_id` wasn't being included in `required_grain`.
+- **First attempt:** Hardcoded `_DIRECT_GRAIN_COLS` set — rejected as not maintainable.
+- **Fix:** `run_data_modeler()` augments keyword-inferred grain by scanning all physical columns across scanned models. If a PRD dimension value matches any physical column, it's included. No hardcoded list — automatically picks up new tables/columns.
+
+### Fix 3 — Source table correction in scaffold (`builder.py`)
+- **Root cause:** If `required_grain` didn't include `customer_id`, Vanna would generate SQL from `daily_sales` (no `customer_id`) and fail EXPLAIN 3 times.
+- **Fix:** Added `_source_table_for_sql()` — after SQL generation, if SQL references `customer_id` but FROM points to `daily_sales`, regenerates with explicit `stg_orders` instruction.
+
+### Fix 4 — `_wrap_as_dbt_model` double-wrapped already-converted refs (`builder.py`)
+- **Root cause:** New `_BARE_REF_RE` regex matched `stg_orders` inside existing `{{ ref('stg_orders') }}` blocks from Vanna's training data → `{{ ref('{{ ref('stg_orders') }}') }}` → dbt compilation error.
+- **Fix:** Added negative lookbehind/lookahead for single quotes so already-quoted refs are skipped.
+
+### Fix 5 — `_generate_model_sql` dead code removed (`builder.py`)
+- Never called — scaffold always used `vn.generate_sql()`. Removed along with `_AVAILABLE_GRAIN_COLS`.
+
+### Fix 6 — lightdash-deploy image fragile (`lightdash.py`)
+- **Root cause:** `LIGHTDASH_DEPLOY_IMAGE` set by Coolify to a commit-specific tag. When vanna and lightdash-deploy redeploy at different times, the tag diverges → 404 on image pull.
+- **Fix:** Removed env var override entirely. `_get_deploy_image()` now dynamically finds the most recently built/used lightdash-deploy image (stopped containers first, then image tags sorted by creation time).
+
+### Fix 7 — Vanna not routable via Traefik (`docker-compose.yml`)
+- **Root cause:** No `expose` directive on vanna service. Traefik defaulted to port 80 instead of 8084 → "no available server".
+- **Fix:** Added `expose: - "8084"` to vanna service.
+
+### Operational finding — nginx stale state after full stack redeploy
+- After full Coolify redeploy, nginx holds stale upstream connections. `lightdash.baroqafarm.com` returns 504.
+- Fix: `docker restart nginx-<id>` on VPS. Resolves immediately.
+
+### E2E result
+- Triggered "Top Customer Revenue" dashboard from CLI
+- `required_grain: [city, customer_id]` — schema-driven inference correct
+- New model `top_customer_revenue` scaffolded from `stg_orders` with `customer_id` grain
+- 3 charts deployed, dashboard live at `lightdash.baroqafarm.com`
+
+---
+
 ## Session 14 — VPS Deployment Debugging + E2E Fixes (2026-04-05)
 
 ### Context

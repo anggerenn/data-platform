@@ -264,6 +264,12 @@ services:
         condition: service_healthy
       vanna:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     networks:
       - data-network
     restart: unless-stopped

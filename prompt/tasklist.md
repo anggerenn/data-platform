@@ -155,7 +155,7 @@ Replace with BM25 (rank-bm25) — no embedding model needed, ~60MB target.
 ## Gap Fixes — Churn Analysis Testing (2026-03-24, session 11)
 
 ### Untested — Mixed deployment (Coolify first-boot)
-- [ ] **LIGHTDASH_API_KEY lifecycle on Coolify** — first-boot: `lightdash-deploy` container prints PAT to logs; operator must manually copy token → set in Coolify env vars → restart vanna. This handoff has not been tested end-to-end on the VPS. Test plan: deploy fresh to Coolify with `LIGHTDASH_API_KEY=` empty, copy token from `lightdash-deploy` logs, set in Coolify, restart vanna, verify `/dashboard/build` succeeds.
+- [x] **LIGHTDASH_API_KEY lifecycle on Coolify** — first-boot flow verified on VPS: `lightdash-deploy` prints `ldpat_` token to Coolify logs; operator copies token → sets in Coolify env vars → restarts vanna. `/dashboard/build` confirmed working after restart.
 
 ### P2 — Data Modeler silent failure for unsupported metrics
 - [x] **`needs_new_model` not triggered when PRD requests metrics absent from all models** (`builder.py`) — fixed with `_HARD_GRAIN_SIGNALS` dict (active/inactive/churn/retention/leaderboard require `customer_id` physically present); `_uncovered_metrics()` now two-stage: hard check first, keyword score second. When gap detected, `scaffold_model()` calls `vn.generate_sql()` to create the model, validates SQL with `EXPLAIN` + retry loop (up to 3 attempts), runs `dbt run --target scaffold` with admin credentials. `lightdash deploy` updated with `--ignore-errors` so scaffolded models without full Lightdash metadata don't block the deploy. E2E verified: churn dashboard builds on new `customer_churn_risk_revenue` model with 5 charts.
@@ -338,8 +338,17 @@ Root cause of wrong queries: LLM picks between `revenue`, `amount`, `line_total`
 ### Data Modeler — grain-aware model selection
 - [x] `meta.grain` + `meta.relationships` declared on all models in `schema.yml`
 - [x] `validate_schema.py` enforces `meta.grain` on all models with clear error messages
-- [x] `find_best_model()` uses `meta.grain` superset check — picks coarsest covering model
-- [x] `_needs_customer_grain()` removed — replaced by `_GRAIN_SIGNALS` keyword inference + `_HARD_GRAIN_SIGNALS` hard check
+- [x] `grain_covers()` checks physical columns not `meta.grain` — `stg_orders` correctly selected for customer-level queries
+- [x] `run_data_modeler()` augments keyword grain inference from actual scanned model columns — no hardcoded list
+- [x] `_source_table_for_sql()` — scaffold detects if generated SQL needs `customer_id` and forces `stg_orders`
+- [x] `_wrap_as_dbt_model` — bare `stg_*/raw_*` refs converted to `{{ ref() }}`, no double-wrapping
+- [x] `_generate_model_sql()` dead code removed
+- [x] lightdash-deploy image detection dynamic — no more `LIGHTDASH_DEPLOY_IMAGE` commit hash fragility
+- [x] `expose: 8084` on vanna — Traefik routes correctly to vanna domain
+
+### VPS operational notes
+- [x] `vanna.baroqafarm.com` domain configured in Coolify
+- [x] **nginx stale state after full redeploy** — added `resolver 127.0.0.11 valid=10s` + variable-based `proxy_pass` in `nginx/lightdash.conf` so nginx re-resolves Docker DNS every 10s; added health check to nginx service in `docker-compose.yml`
 
 ### Instructor — update README when dashboard is enriched with new narrative
 - [x] merge_guides() merges existing + new PRD; update_readme_tile() updates YAML + redeploys; wired in app.py on partial_uncovered
