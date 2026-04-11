@@ -30,6 +30,7 @@ def test_detects_iso_date_column():
     assert result["from"] == "2026-01-15"
     assert result["to"]   == "2026-03-01"
     assert result["column"] == "order_date"
+    assert result["distinct_periods"] == 3
 
 
 def test_returns_empty_when_no_date_column():
@@ -48,6 +49,7 @@ def test_single_row_from_equals_to():
 
     assert result["from"] == "2026-03-01"
     assert result["to"]   == "2026-03-01"
+    assert result["distinct_periods"] == 1
 
 
 def test_skips_null_date_values():
@@ -74,3 +76,18 @@ def test_picks_first_matching_date_column():
 def test_ignores_non_date_named_numeric_column():
     rows = [{"revenue": 100}, {"revenue": 200}]
     assert _detect_date_range(rows, ["revenue"]) == {}
+
+
+def test_distinct_periods_for_monthly_data():
+    """Two distinct months → distinct_periods=2 so LLM knows MoM is possible."""
+    rows = [
+        {"month_start": "2026-03-01", "category": "Food",        "revenue": 500},
+        {"month_start": "2026-03-01", "category": "Electronics", "revenue": 400},
+        {"month_start": "2026-04-01", "category": "Food",        "revenue": 550},
+        {"month_start": "2026-04-01", "category": "Electronics", "revenue": 420},
+    ]
+    result = _detect_date_range(rows, ["month_start", "category", "revenue"])
+
+    assert result["from"] == "2026-03-01"
+    assert result["to"]   == "2026-04-01"
+    assert result["distinct_periods"] == 2

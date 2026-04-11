@@ -68,7 +68,7 @@ _ISO_DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}')
 
 
 def _detect_date_range(rows: list[dict], columns: list[str]) -> dict:
-    """Find a date column and return its min/max as {from, to, column}.
+    """Find a date column and return its min/max + distinct period count.
 
     Checks column name first (must contain date/month/year/period/time),
     then verifies values look like ISO date strings (YYYY-MM-DD prefix).
@@ -82,9 +82,11 @@ def _detect_date_range(rows: list[dict], columns: list[str]) -> dict:
             continue
         if all(_ISO_DATE_RE.match(v) for v in values):
             sorted_vals = sorted(values)
+            distinct_count = len(set(v[:10] for v in values))
             return {
                 "from": sorted_vals[0][:10],
                 "to": sorted_vals[-1][:10],
+                "distinct_periods": distinct_count,
                 "column": col,
             }
     return {}
@@ -130,7 +132,10 @@ async def explore_data(ctx: RunContext[AgentDeps], question: str) -> dict:
     summary = _summarise_rows(rows, cols)
     if ctx.deps.result_date_range:
         dr = ctx.deps.result_date_range
-        summary = f"Date range: {dr['from']} to {dr['to']} (column: {dr['column']})\n" + summary
+        summary = (
+            f"Date range: {dr['from']} to {dr['to']}"
+            f" ({dr['distinct_periods']} distinct period(s), column: {dr['column']})\n"
+        ) + summary
     ctx.deps.result_summary = summary
     return {"sql": sql, "row_count": len(df), "columns": cols}
 
