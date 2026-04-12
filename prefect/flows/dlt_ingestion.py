@@ -63,6 +63,11 @@ def run_dlt():
         ),
         pipelines_dir=os.path.expanduser(os.environ["ANALYTICS_PIPELINES_DIR"])
     )
-    load_info = pipeline.run([generate_orders(), generate_customers()])
+    # write_disposition="replace" truncates destination tables before loading
+    # so each run produces a fresh dataset instead of appending duplicates.
+    load_info = pipeline.run(
+        [generate_orders(), generate_customers()],
+        write_disposition="replace",
+    )
     print(f"dlt load complete: {load_info}")
     return load_info
